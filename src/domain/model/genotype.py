@@ -1,11 +1,13 @@
 """
 domain/model/genotype.py
 ========================
-Genotipo para la arquitectura fw² (w + fw¹ + fw²).
+Genotipo para la arquitectura fw³ (w + fw¹ + fw² + fw³).
 
-Extiende el esquema de Bullinaria (2009) —que evoluciona un único par
-(fw_decay δ₁, fw_scale σ₁)— añadiendo un segundo par independiente
-(fw2_decay δ₂, fw2_scale σ₂) para la segunda línea de fast-weights.
+Extiende fw² añadiendo un tercer par (fw3_decay δ₃, fw3_scale σ₃)
+para la línea de fast-weight semi-lenta.
+
+El fenómeno central de esta extensión es que δ₃ converge a 0.0,
+creando una memoria de sesión permanente emergente no programada.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -15,28 +17,31 @@ import numpy as np
 @dataclass
 class Genotype:
     # ── Topología ─────────────────────────────────────────────────────────────
-    n_hid:  float
-    c_ih:   float;  c_ho:   float
+    n_hid: float
+    c_ih:  float;  c_ho:  float
 
     # ── Tasas de aprendizaje (4 componentes) ──────────────────────────────────
     eta_ih: float;  eta_hb: float
     eta_ho: float;  eta_ob: float
 
     # ── Distribuciones iniciales de pesos ─────────────────────────────────────
-    l_ih:   float;  u_ih:   float
-    l_hb:   float;  u_hb:   float
-    l_ho:   float;  u_ho:   float
-    l_ob:   float;  u_ob:   float
+    l_ih: float;  u_ih: float
+    l_hb: float;  u_hb: float
+    l_ho: float;  u_ho: float
+    l_ob: float;  u_ob: float
 
     # ── Regularización ────────────────────────────────────────────────────────
-    ospo:   float;  lam:    float
-    tol_t:  float;  tol_s:  float
+    ospo:  float;  lam:   float
+    tol_t: float;  tol_s: float
 
-    # ── fw¹ — Bullinaria (2009) ───────────────────────────────────────────────
+    # ── fw¹ — Bullinaria (2009) corto plazo ───────────────────────────────────
     fw_decay:  float;  fw_scale:  float
 
-    # ── fw² — extensión propuesta ─────────────────────────────────────────────
+    # ── fw² — extensión previa, medio plazo ───────────────────────────────────
     fw2_decay: float;  fw2_scale: float
+
+    # ── fw³ — esta extensión, semi-largo plazo ────────────────────────────────
+    fw3_decay: float;  fw3_scale: float
 
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -54,8 +59,9 @@ class Genotype:
             l_ob=r(0, 1),      u_ob=r(0, 1),
             ospo=r(0, 0.2),    lam=r(0, 0.001),
             tol_t=r(0, 0.5),   tol_s=r(0, 1.0),
-            fw_decay=r(0, 0.2),    fw_scale=r(2, 20),
-            fw2_decay=r(0, 0.05),  fw2_scale=r(1, 10),
+            fw_decay=r(0, 0.2),    fw_scale=r(2, 20),    # fw¹ rápido
+            fw2_decay=r(0, 0.05),  fw2_scale=r(1, 10),   # fw² medio
+            fw3_decay=r(0, 0.01),  fw3_scale=r(0.5, 5),  # fw³ lento
         )
 
     def as_array(self) -> np.ndarray:
@@ -67,6 +73,7 @@ class Genotype:
             self.ospo,   self.lam,     self.tol_t,   self.tol_s,
             self.fw_decay,   self.fw_scale,
             self.fw2_decay,  self.fw2_scale,
+            self.fw3_decay,  self.fw3_scale,
         ], dtype=np.float64)
 
     @staticmethod
@@ -79,6 +86,7 @@ class Genotype:
             ospo=a[15],   lam=a[16],   tol_t=a[17],  tol_s=a[18],
             fw_decay=a[19],   fw_scale=a[20],
             fw2_decay=a[21],  fw2_scale=a[22],
+            fw3_decay=a[23],  fw3_scale=a[24],
         )
 
     def crossover_mutate(self, other: "Genotype", std: float, rng) -> "Genotype":
@@ -88,11 +96,10 @@ class Genotype:
             + rng.normal(0, std, len(a))
         )
         child = np.clip(child, 0, None)
-        child[20] = max(child[20], 2.0)   # fw_scale  ≥ 2
-        child[22] = max(child[22], 1.0)   # fw2_scale ≥ 1
+        child[20] = max(child[20], 2.0)    # fw_scale  ≥ 2
+        child[22] = max(child[22], 1.0)    # fw2_scale ≥ 1
+        child[24] = max(child[24], 0.5)    # fw3_scale ≥ 0.5
         return Genotype.from_array(child)
-
-    # ── Serialización ─────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
         return {
@@ -111,6 +118,8 @@ class Genotype:
             "fw_scale":   round(self.fw_scale,  2),
             "fw2_decay":  round(self.fw2_decay, 4),
             "fw2_scale":  round(self.fw2_scale, 2),
+            "fw3_decay":  round(self.fw3_decay, 4),
+            "fw3_scale":  round(self.fw3_scale, 2),
         }
 
     def summary(self) -> str:
@@ -122,5 +131,6 @@ class Genotype:
             f"λ={d['lam']:.2e}  oSPO={d['ospo']:.4f} | "
             f"tol_t={d['tol_t']:.3f}  tol_s={d['tol_s']:.3f} | "
             f"δ₁={d['fw_decay']:.4f}  σ₁={d['fw_scale']:.1f} | "
-            f"δ₂={d['fw2_decay']:.4f}  σ₂={d['fw2_scale']:.1f}"
+            f"δ₂={d['fw2_decay']:.4f}  σ₂={d['fw2_scale']:.1f} | "
+            f"δ₃={d['fw3_decay']:.4f}  σ₃={d['fw3_scale']:.1f}"
         )

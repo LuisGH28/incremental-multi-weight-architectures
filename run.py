@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-run.py — Punto de entrada del experimento fw²
+run.py — Punto de entrada del experimento fw³
 ==============================================
 
 Uso:
@@ -11,19 +11,16 @@ Uso:
 Ejemplos:
   python run.py cli
   python run.py cli --full
-  python run.py cli --generations 100 --pop-size 50
-  python run.py cli --no-dual
-  python run.py cli --train data/optdigits.tra --test data/optdigits.tes
+  python run.py cli --generations 50 --pop-size 100 --max-epochs 500
+  python run.py cli --full --workers 0          # multicore, sin dashboard
+  python run.py cli --no-dual                   # solo pesos base
 
   python run.py server
   python run.py server --generations 50 --pop-size 100 --max-epochs 500
-  python run.py server --port 8766
 """
 
 import os
 import sys
-
-# ── Defaults por modo ─────────────────────────────────────────────────────────
 
 CLI_DEFAULTS = (
     "--dataset optdigits "
@@ -45,15 +42,11 @@ SERVER_DEFAULTS = (
 
 
 def run_server(extra_args: str = ""):
-    os.system(
-        "PYTHONPATH=. python3 src/interfaces/http/server.py " + extra_args
-    )
+    os.system("PYTHONPATH=. python3 src/interfaces/http/server.py " + extra_args)
 
 
 def run_cli(extra_args: str = ""):
-    os.system(
-        "PYTHONPATH=. python3 src/interfaces/cli/neuro.py " + extra_args
-    )
+    os.system("PYTHONPATH=. python3 src/interfaces/cli/neuro.py " + extra_args)
 
 
 if __name__ == "__main__":
@@ -69,6 +62,5 @@ if __name__ == "__main__":
     elif mode == "cli":
         run_cli(extra or CLI_DEFAULTS)
     else:
-        print(f"Modo desconocido: '{mode}'")
-        print("Usa 'server' o 'cli'")
+        print(f"Modo desconocido: '{mode}'  —  usa 'server' o 'cli'")
         sys.exit(1)

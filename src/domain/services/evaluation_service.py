@@ -1,8 +1,8 @@
 """
 domain/services/evaluation_service.py
-======================================
-Lógica de evaluación de individuos y generación de la
-matriz triangular al estilo Bullinaria (2009) Tablas 3 y 4.
+=======================================
+Evaluación de individuos y generación de la matriz triangular para fw³.
+Idéntico en estructura a fw² pero opera con el MLP de 4 líneas de peso.
 """
 from __future__ import annotations
 
@@ -16,10 +16,6 @@ from src.domain.model.mlp import MLP
 from src.infrastructure.data.incremental_splitter import split_incremental
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Evaluación de un individuo en una generación
-# ─────────────────────────────────────────────────────────────────────────────
-
 def evaluate_individual(
     g: Genotype,
     sessions: list,
@@ -31,13 +27,6 @@ def evaluate_individual(
     individual_idx: Optional[int] = None,
     gen: Optional[int] = None,
 ) -> float:
-    """
-    Entrena un individuo en las 6 sesiones incrementales y devuelve
-    su fitness (accuracy en el conjunto de validación).
-
-    emit_fn se pasa al MLP sólo para los primeros verbose_individuals
-    (el caller decide si pasar None o el publisher real).
-    """
     net = MLP(g, use_dual=use_dual, rng=rng)
     for s_idx, (Xs, ys) in enumerate(sessions):
         net.train_session(
@@ -51,29 +40,18 @@ def evaluate_individual(
     return net.accuracy(val[0], val[1])
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Matriz triangular (Tablas 3 / 4 de Bullinaria 2009)
-# ─────────────────────────────────────────────────────────────────────────────
-
 def evaluate_triangular(
     top_individuals: List[Genotype],
     X_train: np.ndarray,
     y_train: np.ndarray,
-    X_test: np.ndarray,
-    y_test: np.ndarray,
+    X_test:  np.ndarray,
+    y_test:  np.ndarray,
     use_dual: bool,
     max_epochs: int,
     master_rng,
     n_runs: int = 5,
     log_fn=None,
 ) -> Tuple[list, list, float, float]:
-    """
-    Evalúa la arquitectura usando el mejor individuo con n_runs ejecuciones
-    independientes, promediando resultados al estilo de Bullinaria (2009).
-
-    Devuelve:
-      (avg_matrix, avg_session_accs, mean_acc, std_acc)
-    """
     n_sessions = 6
     g          = top_individuals[0]
     all_matrices, all_s_accs, all_t_accs = [], [], []
@@ -90,7 +68,7 @@ def evaluate_triangular(
         for s_idx, (Xs, ys) in enumerate(sessions):
             net.train_session(Xs, ys, max_epochs=max_epochs)
             for b_idx in range(s_idx + 1):
-                Xb, yb       = sessions[b_idx]
+                Xb, yb = sessions[b_idx]
                 matrix[s_idx][b_idx] = round(net.accuracy(Xb, yb) * 100, 2)
             s_accs.append(round(net.accuracy(X_test, y_test) * 100, 2))
 
@@ -101,7 +79,6 @@ def evaluate_triangular(
         if log_fn:
             log_fn(f"  [Triangular run {run+1}/{n_runs}] T6_test={s_accs[-1]:.2f}%")
 
-    # Promedio elemento a elemento
     avg = [[None] * n_sessions for _ in range(n_sessions)]
     for s in range(n_sessions):
         for b in range(n_sessions):
@@ -117,35 +94,28 @@ def evaluate_triangular(
         round(float(np.mean([all_s_accs[r][s] for r in range(n_runs)])), 2)
         for s in range(n_sessions)
     ]
-    mean_acc = round(float(np.mean(all_t_accs)), 2)
-    std_acc  = round(float(np.std(all_t_accs)),  2)
+    return (
+        avg,
+        avg_s_accs,
+        round(float(np.mean(all_t_accs)), 2),
+        round(float(np.std(all_t_accs)),  2),
+    )
 
-    return avg, avg_s_accs, mean_acc, std_acc
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Impresión y exportación de la matriz triangular
-# ─────────────────────────────────────────────────────────────────────────────
 
 def print_triangular_matrix(
-    matrix: list,
-    session_accs: list,
-    mean_acc: float,
-    std_acc: float,
-    label: str = "fw²",
+    matrix: list, session_accs: list,
+    mean_acc: float, std_acc: float,
+    label: str = "fw³",
 ) -> str:
     n   = len(matrix)
     sep = "─" * 74
     hdr = f"  {'':8s}" + "".join(f"  {'B'+str(i+1):>8s}" for i in range(n))
     lines = [
-        "",
-        "=" * 74,
+        "", "=" * 74,
         f"  MATRIZ TRIANGULAR — {label}",
         "  Porcentaje de clasificación correcta",
         "  Equivalente a Tablas 3/4 de Bullinaria (2009)",
-        "=" * 74,
-        hdr,
-        f"  {sep}",
+        "=" * 74, hdr, f"  {sep}",
     ]
     for s in range(n):
         row = f"  T{str(s+1):<7s}"
@@ -153,18 +123,13 @@ def print_triangular_matrix(
             v    = matrix[s][b]
             row += f"  {v:>8.2f}" if v is not None else f"  {'--':>8s}"
         lines.append(row)
-    lines.append(f"  {sep}")
-    test_row = (
-        f"  {'Test':<8s}"
-        + "".join(f"  {a:>8.2f}" for a in session_accs)
-    )
     lines += [
-        test_row,
+        f"  {sep}",
+        f"  {'Test':<8s}" + "".join(f"  {a:>8.2f}" for a in session_accs),
         f"  {sep}",
         f"  Media (top 10%): {mean_acc:.2f}% ± {std_acc:.2f}%",
         f"  Referencia Bullinaria fw¹:  95.07% ± 0.04%",
-        "=" * 74,
-        "",
+        "=" * 74, "",
     ]
     output = "\n".join(lines)
     print(output, flush=True)
@@ -172,12 +137,9 @@ def print_triangular_matrix(
 
 
 def save_triangular_csv(
-    matrix: list,
-    session_accs: list,
-    mean_acc: float,
-    std_acc: float,
-    path: str,
-    label: str,
+    matrix: list, session_accs: list,
+    mean_acc: float, std_acc: float,
+    path: str, label: str,
 ) -> None:
     n = len(matrix)
     with open(path, "w", newline="") as f:
@@ -187,8 +149,7 @@ def save_triangular_csv(
         w.writerow(["Sesion"] + [f"B{i+1}" for i in range(n)])
         for s in range(n):
             w.writerow(
-                [f"T{s+1}"]
-                + [
+                [f"T{s+1}"] + [
                     f"{matrix[s][b]:.2f}" if matrix[s][b] is not None else ""
                     for b in range(n)
                 ]
@@ -198,15 +159,8 @@ def save_triangular_csv(
         w.writerow(["std_acc",  std_acc])
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Matriz de confusión
-# ─────────────────────────────────────────────────────────────────────────────
-
 def compute_confusion(
-    net: MLP,
-    X_test: np.ndarray,
-    y_test: np.ndarray,
-    num_classes: int = 10,
+    net: MLP, X_test: np.ndarray, y_test: np.ndarray, num_classes: int = 10,
 ) -> np.ndarray:
     preds = net.predict_all(X_test)
     cm    = np.zeros((num_classes, num_classes), dtype=np.int32)

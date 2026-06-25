@@ -1,22 +1,15 @@
 """
 domain/services/evolution_service.py
 ======================================
-Bucle principal de neuroevolución para la arquitectura fw²
-(w + fw¹ + fw²).
+Bucle principal de neuroevolución para fw³ (w + fw¹ + fw² + fw³).
 
-Replica el esquema de Bullinaria (2009):
-  - Población de 100 redes
-  - Cruce con rango + mutación gaussiana
-  - Los 50% mejores sobreviven y generan un hijo cada uno
-  - Distintos splits de entrenamiento/validación en cada generación
-
-Extensión propuesta:
-  - El genotipo incluye (δ₂, σ₂) para una segunda línea de fast-weights
-  - Todos los demás parámetros y el protocolo son idénticos a fw¹
+Incluye soporte para multiprocessing (--workers N) del script original,
+manteniendo la compatibilidad con el modo dashboard SSE (single process).
 """
 from __future__ import annotations
 
 import csv
+import multiprocessing as mp
 import os
 import time
 from datetime import timedelta
@@ -39,6 +32,22 @@ from src.infrastructure.events.stdout_event_publisher import EventPublisher
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Worker para multiprocessing (debe ser importable en nivel de módulo)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _eval_worker(args):
+    idx, g_arr, sessions_xy, val_xy, use_dual, max_epochs, seed = args
+    rng      = np.random.default_rng(seed)
+    g        = Genotype.from_array(np.array(g_arr))
+    net      = MLP(g, use_dual=use_dual, rng=rng)
+    sessions = [(np.array(X), np.array(y)) for X, y in sessions_xy]
+    val      = (np.array(val_xy[0]), np.array(val_xy[1]))
+    for Xs, ys in sessions:
+        net.train_session(Xs, ys, max_epochs=max_epochs)
+    return idx, net.accuracy(val[0], val[1])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -57,7 +66,7 @@ def _elapsed_str(seconds: float) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Historial de evolución (para gráficas y CSV de progreso)
+# Historial de evolución
 # ─────────────────────────────────────────────────────────────────────────────
 
 class EvoHistory:
@@ -75,20 +84,16 @@ class EvoHistory:
         self.log_fw1_scale: List[float] = []
         self.log_fw2_decay: List[float] = []
         self.log_fw2_scale: List[float] = []
+        self.log_fw3_decay: List[float] = []
+        self.log_fw3_scale: List[float] = []
         self.tol_t:         List[float] = []
         self.tol_s:         List[float] = []
         self.val_acc:       List[float] = []
         self.test_acc:      List[float] = []
 
-    def record(
-        self,
-        gen: int,
-        survivors: List[Genotype],
-        top_fitness: float,
-        test_acc_val: Optional[float] = None,
-    ) -> None:
+    def record(self, gen: int, survivors: List[Genotype],
+               top_fitness: float, test_acc_val: Optional[float] = None):
         eps = 1e-30
-
         def mean(fn):  return float(np.mean([fn(g) for g in survivors]))
         def lmean(fn): return float(np.mean([np.log10(max(fn(g), eps)) for g in survivors]))
 
@@ -105,6 +110,8 @@ class EvoHistory:
         self.log_fw1_scale.append(lmean(lambda g: g.fw_scale))
         self.log_fw2_decay.append(lmean(lambda g: g.fw2_decay))
         self.log_fw2_scale.append(lmean(lambda g: g.fw2_scale))
+        self.log_fw3_decay.append(lmean(lambda g: g.fw3_decay))
+        self.log_fw3_scale.append(lmean(lambda g: g.fw3_scale))
         self.tol_t.append(mean(lambda g: g.tol_t))
         self.tol_s.append(mean(lambda g: g.tol_s))
         self.val_acc.append(top_fitness * 100.0)
@@ -122,7 +129,6 @@ def run_evolution(
     y_train: np.ndarray,
     X_test:  np.ndarray,
     y_test:  np.ndarray,
-    # ── Hiperparámetros evolutivos ─────────────────────────────────────────
     pop_size:            int   = 100,
     n_generations:       int   = 50,
     use_dual:            bool  = True,
@@ -133,23 +139,15 @@ def run_evolution(
     verbose_individuals: int   = 3,
     n_in:                int   = 64,
     n_out:               int   = 10,
-    # ── Salida ────────────────────────────────────────────────────────────
-    out_prefix:  str = "fw2",
+    out_prefix:  str = "fw3",
     tri_runs:    int = 5,
     dir_data:    str = "result",
     dir_plots:   str = "plots",
-    # ── Publisher de eventos (dashboard) ──────────────────────────────────
+    n_workers:   int = 0,
     publisher: Optional[EventPublisher] = None,
     log_fn=None,
     log_detail_fn=None,
 ):
-    """
-    Ejecuta la neuroevolución para fw².
-
-    publisher  — instancia de EventPublisher o None (sin dashboard)
-    log_fn     — callable(str) para mensajes de terminal/log
-    log_detail_fn — callable(str) para mensajes sólo al archivo .log
-    """
     run_start = time.time()
 
     if log_fn        is None: log_fn        = print
@@ -160,9 +158,13 @@ def run_evolution(
             publisher.emit(event_type, **kwargs)
 
     label = (
-        "fw² — w + fw¹ + fw² (extensión propuesta)"
+        "fw³ — w + fw¹ + fw² + fw³ (extensión propuesta)"
         if use_dual else "MLP sin fast-weights"
     )
+
+    n_cpu     = mp.cpu_count()
+    n_workers = n_workers if n_workers > 0 else n_cpu
+    n_workers = min(n_workers, pop_size)
 
     master_rng = np.random.default_rng(seed)
     history    = EvoHistory()
@@ -170,9 +172,7 @@ def run_evolution(
     os.makedirs(dir_data,  exist_ok=True)
     os.makedirs(dir_plots, exist_ok=True)
 
-    # ── CSV de progreso por generación ────────────────────────────────────────
-    csv_progress_path = os.path.join(dir_data, f"{out_prefix}_progress.csv")
-    csv_file = open(csv_progress_path, "w", newline="")
+    csv_file = open(os.path.join(dir_data, f"{out_prefix}_progress.csv"), "w", newline="")
     cw = csv.writer(csv_file)
     cw.writerow([
         "gen", "best_fitness_val",
@@ -184,7 +184,7 @@ def run_evolution(
     emit("config",
          pop_size=pop_size, n_generations=n_generations,
          use_dual=use_dual, max_epochs=max_epochs,
-         n_train=len(X_train), n_test=len(X_test))
+         n_train=len(X_train), n_test=len(X_test), n_fw_lines=3)
 
     population = [Genotype.random(master_rng) for _ in range(pop_size)]
     fitness    = np.zeros(pop_size)
@@ -192,6 +192,7 @@ def run_evolution(
     log_fn("=" * 60)
     log_fn(f"INICIO EVOLUCIÓN — {label}")
     log_fn(f"Budget: {n_generations} gen | pop={pop_size} | max_epochs={max_epochs}")
+    log_fn(f"Paralelismo: {n_workers} workers / {n_cpu} CPUs disponibles")
     log_fn("=" * 60)
 
     # ════════════════════════════════════════════════════════════════════
@@ -204,28 +205,44 @@ def run_evolution(
 
         emit("gen_start", gen=gen, n_gen=n_generations, pop_size=pop_size)
 
-        for i, g in enumerate(population):
-            eval_rng = np.random.default_rng(master_rng.integers(0, 2**31))
-            use_emit = (i < verbose_individuals)
+        use_mp = (n_workers > 1 and publisher is None)
 
-            fitness[i] = evaluate_individual(
-                g, sessions, val, use_dual, max_epochs, eval_rng,
-                emit_fn=emit if use_emit else None,
-                individual_idx=i if use_emit else None,
-                gen=gen if use_emit else None,
-            )
-            emit("individual_done",
-                 gen=gen, individual=i,
-                 fitness=round(float(fitness[i]), 4))
+        if use_mp:
+            # ── Modo multiprocessing ──────────────────────────────────────────
+            sessions_xy = [(Xs.tolist(), ys.tolist()) for Xs, ys in sessions]
+            val_xy      = (val[0].tolist(), val[1].tolist())
+            worker_args = [
+                (i, population[i].as_array().tolist(), sessions_xy, val_xy,
+                 use_dual, max_epochs, int(master_rng.integers(0, 2**31)))
+                for i in range(len(population))
+            ]
+            with mp.Pool(processes=n_workers) as pool:
+                results = pool.map(_eval_worker, worker_args)
+            for idx, fit in results:
+                fitness[idx] = fit
+        else:
+            # ── Modo single-process (dashboard o n_workers=1) ─────────────────
+            for i, g in enumerate(population):
+                eval_rng  = np.random.default_rng(master_rng.integers(0, 2**31))
+                use_emit  = (i < verbose_individuals)
+                fitness[i] = evaluate_individual(
+                    g, sessions, val, use_dual, max_epochs, eval_rng,
+                    emit_fn=emit if use_emit else None,
+                    individual_idx=i if use_emit else None,
+                    gen=gen if use_emit else None,
+                )
+                emit("individual_done", gen=gen, individual=i,
+                     fitness=round(float(fitness[i]), 4))
 
-        # ── Selección ──────────────────────────────────────────────────────
-        ranked   = np.argsort(fitness)[::-1]
+        # ── Selección ──────────────────────────────────────────────────────────
+        cur_size = len(population)
+        ranked   = np.argsort(fitness[:cur_size])[::-1]
         best_idx = ranked[0]
         best_g   = population[best_idx]
-        top_n    = max(1, pop_size // 10)
+        top_n    = max(1, cur_size // 10)
         top_fit  = float(fitness[ranked[:top_n]].mean())
 
-        # Test rápido del mejor para el dashboard / CSV
+        # Test rápido del mejor
         tst_rng = np.random.default_rng(master_rng.integers(0, 2**31))
         tst_ses, _ = split_incremental(
             X_train, y_train,
@@ -238,20 +255,16 @@ def run_evolution(
             t_accs.append(round(tst_net.accuracy(X_test, y_test) * 100, 2))
         quick_test = tst_net.accuracy(X_test, y_test)
 
-        survivors = [population[i] for i in ranked[: pop_size // 2]]
+        n_survivors = max(1, cur_size // 2)
+        survivors   = [population[i] for i in ranked[:n_survivors]]
         history.record(gen, survivors, top_fit, quick_test)
 
         elapsed_gen = time.time() - t0
         elapsed_tot = time.time() - run_start
 
-        while len(t_accs) < 6:
-            t_accs.append("")
-        cw.writerow([
-            gen,
-            round(float(fitness[best_idx]) * 100, 2),
-            *t_accs[:6],
-            round(elapsed_gen, 1),
-        ])
+        while len(t_accs) < 6: t_accs.append("")
+        cw.writerow([gen, round(float(fitness[best_idx]) * 100, 2),
+                     *t_accs[:6], round(elapsed_gen, 1)])
         csv_file.flush()
 
         log_fn(
@@ -260,30 +273,28 @@ def run_evolution(
             f"gen={_elapsed_str(elapsed_gen)}  total={_elapsed_str(elapsed_tot)}"
         )
         log_detail_fn(f"  Mejor genotipo gen {gen}: {best_g.summary()}")
-        log_detail_fn(
-            f"  Fitness dist: min={fitness.min()*100:.2f}% "
-            f"mean={fitness.mean()*100:.2f}% max={fitness.max()*100:.2f}%"
-        )
 
         emit("gen_end",
              gen=gen,
              best_fitness=round(float(fitness[best_idx]), 4),
              top10_mean=round(top_fit, 4),
-             pop_mean=round(float(fitness.mean()), 4),
+             pop_mean=round(float(fitness[:cur_size].mean()), 4),
              elapsed=round(elapsed_gen, 2),
              best_genotype=best_g.to_dict(),
              fitness_all=[round(float(f), 4) for f in fitness[ranked]])
 
-        # ── Reproducción ───────────────────────────────────────────────────
+        # ── Reproducción ───────────────────────────────────────────────────────
         parent_rng = np.random.default_rng(master_rng.integers(0, 2**31))
+        n_children = pop_size - len(survivors)
         children = [
-            p.crossover_mutate(
+            survivors[i % len(survivors)].crossover_mutate(
                 survivors[parent_rng.integers(0, len(survivors))],
                 mutation_std, parent_rng,
             )
-            for p in survivors
+            for i in range(n_children)
         ]
         population = survivors + children
+        fitness    = np.zeros(pop_size)
 
     # ════════════════════════════════════════════════════════════════════
     #  EVALUACIÓN FINAL
@@ -293,6 +304,7 @@ def run_evolution(
 
     final_rng = np.random.default_rng(master_rng.integers(0, 2**31))
     final_sessions, final_val = split_incremental(X_train, y_train, rng=final_rng)
+    fitness = np.zeros(len(population))
     for i, g in enumerate(population):
         er  = np.random.default_rng(master_rng.integers(0, 2**31))
         net = MLP(g, use_dual=use_dual, rng=er)
@@ -304,8 +316,7 @@ def run_evolution(
     top_n      = max(1, int(top_frac * pop_size))
     top_indivs = [population[i] for i in ranked[:top_n]]
 
-    test_accs    = []
-    session_accs = []
+    test_accs, session_accs = [], []
     for g in top_indivs:
         ts_rng = np.random.default_rng(master_rng.integers(0, 2**31))
         ts_ses, _ = split_incremental(X_train, y_train, rng=ts_rng)
@@ -323,16 +334,16 @@ def run_evolution(
     mean_acc = float(np.mean(test_accs)) * 100
     std_acc  = float(np.std(test_accs))  * 100
 
-    # Matriz de confusión del mejor individuo
-    cm_net   = MLP(
+    # Matriz de confusión
+    cm_net = MLP(
         top_indivs[0], use_dual=use_dual,
         rng=np.random.default_rng(master_rng.integers(0, 2**31)),
     )
-    final_ts, _ = split_incremental(
+    cm_ses, _ = split_incremental(
         X_train, y_train,
         rng=np.random.default_rng(master_rng.integers(0, 2**31)),
     )
-    for Xs, ys in final_ts:
+    for Xs, ys in cm_ses:
         cm_net.train_session(Xs, ys, max_epochs=max_epochs)
     cm = compute_confusion(cm_net, X_test, y_test)
 
@@ -341,13 +352,12 @@ def run_evolution(
     log_fn(f"\n{'='*60}")
     log_fn("RESULTADO FINAL")
     log_fn(f"  Accuracy: {mean_acc:.2f}% ± {std_acc:.2f}%")
-    log_fn("  Referencia Bullinaria: 95.07% ± 0.04%")
+    log_fn(f"  Referencia Bullinaria fw¹: 95.07% ± 0.04%")
     log_fn(f"  Tiempo total: {_elapsed_str(total_elapsed)}")
     log_fn(f"{'='*60}")
 
     ft = session_accs[0] if session_accs else [""] * 6
-    while len(ft) < 6:
-        ft.append("")
+    while len(ft) < 6: ft.append("")
     cw.writerow(["FINAL", round(mean_acc, 2), *ft[:6], round(total_elapsed, 1)])
     csv_file.flush()
     csv_file.close()
@@ -355,7 +365,8 @@ def run_evolution(
     emit("final_result",
          mean_acc=round(mean_acc, 2), std_acc=round(std_acc, 2),
          session_accs=session_accs[0] if session_accs else [],
-         best_genotype=top_indivs[0].to_dict(), target_acc=95.07)
+         best_genotype=top_indivs[0].to_dict(),
+         target_acc=95.07, n_fw_lines=3)
 
     # ── Matriz triangular ─────────────────────────────────────────────────────
     log_fn(f"\n[Generando matriz triangular ({tri_runs} runs)...]")
@@ -368,10 +379,9 @@ def run_evolution(
 
     print_triangular_matrix(tri_matrix, tri_s_accs, tri_mean, tri_std, label=label)
 
-    tri_csv = os.path.join(dir_data, f"{out_prefix}_triangular.csv")
-    tri_txt = os.path.join(dir_data, f"{out_prefix}_triangular.txt")
     save_triangular_csv(tri_matrix, tri_s_accs, tri_mean, tri_std,
-                        path=tri_csv, label=label)
+                        path=os.path.join(dir_data, f"{out_prefix}_triangular.csv"),
+                        label=label)
 
     txt_lines = [
         f"MATRIZ TRIANGULAR — {label}\n",
@@ -389,20 +399,16 @@ def run_evolution(
         "Referencia Bullinaria fw¹: 95.07% ± 0.04%\n",
         f"Tiempo total: {_elapsed_str(total_elapsed)}\n",
     ]
-    with open(tri_txt, "w") as f:
+    with open(os.path.join(dir_data, f"{out_prefix}_triangular.txt"), "w") as f:
         f.writelines(txt_lines)
 
-    # ── Matriz de confusión ───────────────────────────────────────────────────
-    cm_csv = os.path.join(dir_data, f"{out_prefix}_confusion.csv")
-    save_confusion_csv(cm, cm_csv)
+    save_confusion_csv(cm, os.path.join(dir_data, f"{out_prefix}_confusion.csv"))
 
-    # ── Gráficas (importación diferida — matplotlib opcional) ─────────────────
+    # ── Gráficas ──────────────────────────────────────────────────────────────
     log_fn("\n[Generando gráficas...]")
     try:
         from src.shared.utils.plots import (
-            plot_evolution,
-            plot_triangular_heatmap,
-            plot_confusion,
+            plot_evolution, plot_triangular_heatmap, plot_confusion,
         )
         plot_evolution(
             history, label=label,
@@ -426,15 +432,8 @@ def run_evolution(
 
     log_fn(f"\n{'='*60}")
     log_fn("ARCHIVOS GENERADOS")
-    log_fn(f"  {dir_data}/")
-    log_fn(f"    {out_prefix}_progress.csv    — fitness y T1-T6 por generación")
-    log_fn(f"    {out_prefix}_triangular.csv  — matriz triangular (datos)")
-    log_fn(f"    {out_prefix}_triangular.txt  — matriz triangular (texto)")
-    log_fn(f"    {out_prefix}_confusion.csv   — matriz de confusión")
-    log_fn(f"  {dir_plots}/")
-    log_fn(f"    {out_prefix}_evolution.png   — Figure 1 réplica Bullinaria")
-    log_fn(f"    {out_prefix}_heatmap.png     — heatmap matriz triangular")
-    log_fn(f"    {out_prefix}_confusion.png   — matriz de confusión visual")
+    log_fn(f"  {dir_data}/  {out_prefix}_progress.csv | _triangular.csv/txt | _confusion.csv")
+    log_fn(f"  {dir_plots}/ {out_prefix}_evolution.png | _heatmap.png | _confusion.png")
     log_fn(f"\nTiempo total: {_elapsed_str(total_elapsed)}")
     log_fn(f"{'='*60}")
 

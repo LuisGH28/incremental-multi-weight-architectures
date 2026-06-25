@@ -1,15 +1,16 @@
 """
 domain/model/mlp.py
 ====================
-MLP con arquitectura de tres líneas de peso: w + fw¹ + fw².
+MLP con arquitectura de cuatro líneas de peso: w + fw¹ + fw² + fw³.
 
-  - w      : pesos permanentes (slow weights), actualizados con η
-  - fw¹    : fast-weight original de Bullinaria (2009), decay δ₁, scale σ₁
-  - fw²    : segunda línea de fast-weight (extensión propuesta), decay δ₂, scale σ₂
+  - w    : pesos permanentes (slow weights)
+  - fw¹  : fast-weight corto plazo — Bullinaria (2009), decay δ₁, scale σ₁
+  - fw²  : fast-weight medio plazo — extensión previa,  decay δ₂, scale σ₂
+  - fw³  : fast-weight semi-largo  — esta extensión,    decay δ₃, scale σ₃
 
-Cada línea tiene su propio par (δ, σ) evolucionado de forma independiente,
-lo que permite que la evolución descubra distintos roles temporales para
-cada línea.
+El fenómeno δ₃→0 es la contribución central: la evolución descubre
+que la tercera línea debe actuar como memoria permanente de sesión,
+creando espontáneamente tres escalas temporales distintas.
 """
 from __future__ import annotations
 
@@ -20,14 +21,6 @@ from src.shared.utils.math_utils import sigmoid, dsigmoid_from_output, make_one_
 
 
 class MLP:
-    """
-    Perceptrón multicapa con backpropagation y soporte para fast-weights.
-
-    Cuando use_dual=True, mantiene dos conjuntos adicionales de pesos
-    (fw_ih / fw_ho  y  fw2_ih / fw2_ho) que se combinan sumándolos a los
-    pesos base durante el forward pass.
-    """
-
     N_IN  = 64
     N_OUT = 10
 
@@ -39,15 +32,9 @@ class MLP:
         self.use_dual = use_dual
         self.n_hid    = max(1, int(round(g.n_hid)))
 
-        # Máscaras de conectividad parcial
-        self.mask_ih = (
-            rng.uniform(0, 1, (self.N_IN, self.n_hid)) < g.c_ih
-        ).astype(np.float64)
-        self.mask_ho = (
-            rng.uniform(0, 1, (self.n_hid, self.N_OUT)) < g.c_ho
-        ).astype(np.float64)
+        self.mask_ih = (rng.uniform(0, 1, (self.N_IN, self.n_hid)) < g.c_ih).astype(np.float64)
+        self.mask_ho = (rng.uniform(0, 1, (self.n_hid, self.N_OUT)) < g.c_ho).astype(np.float64)
 
-        # Pesos base w  (fila 0 = bias)
         self.w_ih = rng.uniform(-g.l_ih, g.u_ih, (self.N_IN + 1, self.n_hid))
         self.w_ho = rng.uniform(-g.l_ho, g.u_ho, (self.n_hid + 1, self.N_OUT))
         self.w_ih[0] = rng.uniform(-g.l_hb, g.u_hb, self.n_hid)
@@ -55,28 +42,20 @@ class MLP:
         self.w_ih[1:] *= self.mask_ih
         self.w_ho[1:] *= self.mask_ho
 
-        # Fast-weights (sólo cuando use_dual=True)
         if use_dual:
             self.fw_ih  = np.zeros_like(self.w_ih)   # fw¹
             self.fw_ho  = np.zeros_like(self.w_ho)
             self.fw2_ih = np.zeros_like(self.w_ih)   # fw²
             self.fw2_ho = np.zeros_like(self.w_ho)
+            self.fw3_ih = np.zeros_like(self.w_ih)   # fw³
+            self.fw3_ho = np.zeros_like(self.w_ho)
 
     # ── Forward ───────────────────────────────────────────────────────────────
 
     def forward(self, x: np.ndarray):
-        """
-        Pasa un único patrón por la red.
-
-        Devuelve (x_b, hidden, h_b, out):
-          x_b    — entrada con bias prepend
-          hidden — activaciones ocultas
-          h_b    — hidden con bias prepend
-          out    — activaciones de salida
-        """
         if self.use_dual:
-            eff_ih = self.w_ih + self.fw_ih + self.fw2_ih
-            eff_ho = self.w_ho + self.fw_ho + self.fw2_ho
+            eff_ih = self.w_ih + self.fw_ih + self.fw2_ih + self.fw3_ih
+            eff_ho = self.w_ho + self.fw_ho + self.fw2_ho + self.fw3_ho
         else:
             eff_ih = self.w_ih
             eff_ho = self.w_ho
@@ -99,41 +78,32 @@ class MLP:
         session_idx=None,
         gen=None,
     ) -> int:
-        """
-        Entrena la red sobre un batch (X, y) hasta que se alcanza la tolerancia
-        o se agota el presupuesto de épocas.
-
-        Parámetros opcionales de emisión de eventos (para el dashboard):
-          emit_fn        — callable(event_type, **kwargs) o None
-          individual_idx — índice del individuo en la población
-          session_idx    — índice de la sesión incremental (0-5)
-          gen            — generación evolutiva actual
-        """
-        g     = self.g
-        T     = make_one_hot(y, self.N_OUT)
-        N     = X.shape[0]
-        stop  = int(np.ceil((1.0 - g.tol_s) * N))
+        g    = self.g
+        T    = make_one_hot(y, self.N_OUT)
+        N    = X.shape[0]
+        stop = int(np.ceil((1.0 - g.tol_s) * N))
 
         if emit_fn and individual_idx is not None:
             emit_fn(
                 "session_start",
                 gen=gen, individual=individual_idx,
                 session=session_idx, n_patterns=N,
-                arch={"n_hid": self.n_hid, "use_dual": self.use_dual},
+                arch={"n_hid": self.n_hid, "use_dual": self.use_dual, "n_fw": 3},
             )
 
-        correct   = 0
-        total_ce  = 0.0
+        correct  = 0
+        total_ce = 0.0
 
         for epoch in range(max_epochs):
-            # ── Decay de fast-weights al inicio de cada época ─────────────────
+            # ── Decay de fast-weights ─────────────────────────────────────────
             if self.use_dual:
                 self.fw_ih  *= (1.0 - g.fw_decay)
                 self.fw_ho  *= (1.0 - g.fw_decay)
                 self.fw2_ih *= (1.0 - g.fw2_decay)
                 self.fw2_ho *= (1.0 - g.fw2_decay)
+                self.fw3_ih *= (1.0 - g.fw3_decay)   # δ₃ → 0 = memoria permanente
+                self.fw3_ho *= (1.0 - g.fw3_decay)
 
-            # ── Weight decay regularización sobre pesos base ──────────────────
             if g.lam > 0:
                 self.w_ih[1:] *= (1.0 - g.lam)
                 self.w_ho[1:] *= (1.0 - g.lam)
@@ -150,16 +120,12 @@ class MLP:
                     np.sum(t * np.log(out + eps) + (1 - t) * np.log(1 - out + eps))
                 )
 
-                # Tolerancia de salida: si el patrón ya es correcto, saltar
                 if np.max(np.abs(out - t)) < g.tol_t:
                     correct += 1
                     continue
 
                 # ── Backpropagation ───────────────────────────────────────────
                 delta_o = out - t
-
-                # Para el gradiente de capa oculta se usan SÓLO w + fw¹
-                # (coherente con la formulación de Bullinaria 2009)
                 eff_ho  = (self.w_ho + self.fw_ho) if self.use_dual else self.w_ho
                 delta_h = (eff_ho[1:] @ delta_o) * dsigmoid_from_output(hidden, g.ospo)
 
@@ -168,14 +134,14 @@ class MLP:
                 grad_ih[1:] *= self.mask_ih
                 grad_ho[1:] *= self.mask_ho
 
-                # Actualización pesos base (w)
+                # w — pesos lentos
                 self.w_ho    -= g.eta_ho * grad_ho
                 self.w_ho[0] -= g.eta_ob * delta_o
                 self.w_ih    -= g.eta_ih * grad_ih
                 self.w_ih[0] -= g.eta_hb * delta_h
 
-                # Actualización fw¹  (scale σ₁ * η)
                 if self.use_dual:
+                    # fw¹ — corto plazo (σ₁·η, decay δ₁)
                     self.fw_ho    -= (g.fw_scale * g.eta_ho) * grad_ho
                     self.fw_ho[0] -= (g.fw_scale * g.eta_ob) * delta_o
                     self.fw_ih    -= (g.fw_scale * g.eta_ih) * grad_ih
@@ -183,7 +149,7 @@ class MLP:
                     self.fw_ih[1:]  *= self.mask_ih
                     self.fw_ho[1:]  *= self.mask_ho
 
-                    # Actualización fw²  (scale σ₂ * η)
+                    # fw² — medio plazo (σ₂·η, decay δ₂)
                     self.fw2_ho    -= (g.fw2_scale * g.eta_ho) * grad_ho
                     self.fw2_ho[0] -= (g.fw2_scale * g.eta_ob) * delta_o
                     self.fw2_ih    -= (g.fw2_scale * g.eta_ih) * grad_ih
@@ -191,7 +157,14 @@ class MLP:
                     self.fw2_ih[1:] *= self.mask_ih
                     self.fw2_ho[1:] *= self.mask_ho
 
-            # ── Evento de época (cada 50 épocas) ─────────────────────────────
+                    # fw³ — semi-largo plazo (σ₃·η, decay δ₃→0)
+                    self.fw3_ho    -= (g.fw3_scale * g.eta_ho) * grad_ho
+                    self.fw3_ho[0] -= (g.fw3_scale * g.eta_ob) * delta_o
+                    self.fw3_ih    -= (g.fw3_scale * g.eta_ih) * grad_ih
+                    self.fw3_ih[0] -= (g.fw3_scale * g.eta_hb) * delta_h
+                    self.fw3_ih[1:] *= self.mask_ih
+                    self.fw3_ho[1:] *= self.mask_ho
+
             if emit_fn and individual_idx is not None and epoch % 50 == 0:
                 emit_fn(
                     "epoch",
@@ -201,7 +174,6 @@ class MLP:
                     ce=round(total_ce / N, 5),
                 )
 
-            # ── Criterio de parada ────────────────────────────────────────────
             if correct >= stop:
                 if emit_fn and individual_idx is not None:
                     emit_fn(
