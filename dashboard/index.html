@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Bullinaria (2009) — Neuroevolución en vivo | fw² Extension — w + fw¹ + fw²</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<!-- Lucide Icons (SVG modernos) -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="./assets/css/main.css">
+</head>
+<body>
+
+  <!-- BARRA DE NAVEGACIÓN (moderna + smooth scroll) -->
+  <div class="navbar">
+    <div class="nav-container">
+      <div class="logo-area">
+        <div>
+          <h1 style="font-size: 1.35rem; margin-bottom: 0;">Bullinaria (2009)</h1>
+          <div class="logo-badge">Neuroevolución · fw² Extension — w + fw¹ + fw²</div>
+        </div>
+      </div>
+      <button class="menu-toggle" id="menuToggle" aria-label="Menú">☰</button>
+      <div class="nav-links" id="navLinks">
+        <button class="nav-link" data-section="section-estado"><i data-lucide="activity" size="14"></i> Estado</button>
+        <button class="nav-link" data-section="section-arquitectura"><i data-lucide="cpu" size="14"></i> Arquitectura</button>
+        <button class="nav-link" data-section="section-poblacion"><i data-lucide="users" size="14"></i> Población</button>
+        <button class="nav-link" data-section="section-fitness"><i data-lucide="trending-up" size="14"></i> Fitness</button>
+        <button class="nav-link" data-section="section-accuracy"><i data-lucide="target" size="14"></i> Accuracy</button>
+        <button class="nav-link" data-section="section-flujo"><i data-lucide="database" size="14"></i> Flujo</button>
+        <button class="nav-link" data-section="section-logs"><i data-lucide="file-text" size="14"></i> Logs</button>
+      </div>
+      <div id="status-pill" class="status-pill">Conectando…</div>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- BANNER FINAL -->
+    <div id="final-banner" class="final-banner">
+      <h2 id="final-acc" style="font-size: 2rem;">—</h2>
+      <p id="final-sub" class="text-muted">Accuracy final en test set</p>
+    </div>
+
+    <!-- SECCIÓN: Estado general (métricas principales) -->
+    <section id="section-estado">
+      <h2><i data-lucide="activity" size="20"></i> Estado general <span class="section-subtitle">evolución en tiempo real</span></h2>
+      <div class="grid-4cols">
+        <div class="metric-card"><div class="metric-label"><i data-lucide="hash" size="10"></i> Generación</div><div class="metric-value" id="m-gen">—</div></div>
+        <div class="metric-card"><div class="metric-label"><i data-lucide="award" size="10"></i> Mejor fitness</div><div class="metric-value" id="m-best" style="color:var(--color-secondary)">—</div></div>
+        <div class="metric-card"><div class="metric-label"><i data-lucide="crown" size="10"></i> Top 10% media</div><div class="metric-value" id="m-top10" style="color:var(--color-accent)">—</div></div>
+        <div class="metric-card"><div class="metric-label"><i data-lucide="bar-chart-2" size="10"></i> Media población</div><div class="metric-value" id="m-mean">—</div></div>
+      </div>
+    </section>
+
+    <!-- PROGRESO GENERACIONAL -->
+    <div class="card mt-2">
+      <div class="card-header"><h3><i data-lucide="loader-2" size="16"></i> Progreso evolutivo</h3></div>
+      <div class="progress-wrapper"><div class="progress-bar" id="gen-prog"></div></div>
+      <div style="display:flex; justify-content: space-between; margin-top: var(--space-sm);">
+        <span id="prog-label" class="text-muted">Gen 0 / —</span>
+        <span id="prog-time" class="text-muted">—</span>
+      </div>
+    </div>
+
+    <!-- FILA: ARQUITECTURA + POBLACIÓN -->
+    <div class="grid-2cols" style="margin-top: var(--space-lg);">
+      <div class="card" id="section-arquitectura">
+        <div class="card-header"><h3><i data-lucide="cpu" size="16"></i> Arquitectura (mejor individuo)</h3></div>
+        <div id="arch-svg-wrap" style="display: flex; justify-content: center;"></div>
+      </div>
+      <div class="card" id="section-poblacion">
+        <div class="card-header"><h3><i data-lucide="users" size="16"></i> Población fitness</h3></div>
+        <div id="pop-strip" class="pop-strip"></div>
+        <div style="display: flex; gap: var(--space-md); margin-top: var(--space-md); font-size: var(--font-small);">
+          <span><span style="background:#22c55e; display: inline-block; width:12px; height:12px; border-radius:4px;"></span> Alto (>85%)</span>
+          <span><span style="background:#f59e0b; width:12px; height:12px; border-radius:4px; display: inline-block;"></span> Medio (65-85%)</span>
+          <span><span style="background:#e05a3a; width:12px; height:12px; border-radius:4px; display: inline-block;"></span> Bajo (<65%)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRÁFICAS: fitness + accuracy incremental -->
+    <div class="grid-2cols" style="margin-top: var(--space-lg);" id="section-fitness">
+      <div class="card">
+        <div class="card-header"><h3><i data-lucide="trending-up" size="16"></i> Evolución fitness (generaciones)</h3></div>
+        <div class="chart-wrap"><canvas id="chart-fitness"></canvas></div>
+      </div>
+      <div class="card" id="section-accuracy">
+        <div class="card-header"><h3><i data-lucide="target" size="16"></i> Accuracy incremental por sesión</h3></div>
+        <div class="chart-wrap"><canvas id="chart-sessions"></canvas></div>
+      </div>
+    </div>
+
+    <!-- FLUJO DE DATOS / BATCH FLOW -->
+    <div class="card mt-2" id="section-flujo">
+      <div class="card-header"><h3><i data-lucide="database" size="16"></i> Flujo de datos — sesión actual</h3></div>
+      <div id="flow-svg-wrap" class="flow-svg-wrap"></div>
+    </div>
+
+    <!-- GENOTIPO MEJOR INDIVIDUO -->
+    <div class="card mt-2">
+      <div class="card-header"><h3><i data-lucide="dna" size="16"></i> Genotipo del mejor individuo</h3></div>
+      <div id="geno-grid" class="geno-grid"></div>
+    </div>
+
+    <!-- SESSION LOG -->
+    <div class="card mt-2" id="section-logs">
+      <div class="card-header"><h3><i data-lucide="file-text" size="16"></i> Log detallado (individuos 0–2)</h3></div>
+      <div id="session-log" class="session-log"></div>
+    </div>
+
+    <footer>
+      Bullinaria (2009) — Extended dual fast weights (fw²) · OptDigits UCI · Neuroevolución en vivo
+    </footer>
+  </div>
+
+<script type="module" src="./assets/js/main.js"></script>
+</body>
+</html>
