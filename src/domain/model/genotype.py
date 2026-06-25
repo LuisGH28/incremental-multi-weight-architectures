@@ -49,7 +49,7 @@ class Genotype:
     def random(rng) -> "Genotype":
         r = rng.uniform
         return Genotype(
-            n_hid=r(1, 100),
+            n_hid=r(1, 512),
             c_ih=r(0, 1),      c_ho=r(0, 1),
             eta_ih=r(0, 1),    eta_hb=r(0, 1),
             eta_ho=r(0, 1),    eta_ob=r(0, 1),

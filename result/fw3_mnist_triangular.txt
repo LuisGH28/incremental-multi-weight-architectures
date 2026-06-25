@@ -1,0 +1,13 @@
+MATRIZ TRIANGULAR — fw³ — w + fw¹ + fw² + fw³ (extensión propuesta) — MNIST (784 inputs)
+Sesion         B1       B2       B3       B4       B5       B6
+T1          49.60       --       --       --       --       --
+T2          42.90    43.60       --       --       --       --
+T3          48.00    46.90    51.40       --       --       --
+T4          47.20    44.90    48.40    48.90       --       --
+T5          49.00    50.30    51.30    52.50    55.20       --
+T6          48.90    49.90    48.60    51.00    51.10    52.90
+Test        39.40    40.02    46.52    45.72    49.89    48.40
+
+Media: 48.40% ± 6.89%
+Referencia Bullinaria fw¹ (OptDigits): 95.07% ± 0.04%
+Tiempo total: 2min 57s

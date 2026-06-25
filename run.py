@@ -1,43 +1,50 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-run.py — Punto de entrada del experimento fw³
-==============================================
+run.py — fw³-MNIST  (w + fw¹ + fw² + fw³)
+==========================================
 
 Uso:
-  python run.py cli    [opciones]   → ejecución en terminal
-  python run.py server [opciones]  → dashboard en http://localhost:8765
+  python run.py cli    [opciones]
+  python run.py server [opciones]
 
-Ejemplos:
-  python run.py cli
+── Formato IDX binario (oficial MNIST) ──────────────────────────────
+  python run.py cli \\
+      --train-images data/train-images-idx3-ubyte \\
+      --train-labels data/train-labels-idx1-ubyte \\
+      --test-images  data/t10k-images-idx3-ubyte  \\
+      --test-labels  data/t10k-labels-idx1-ubyte
+
+── Formato CSV (Kaggle MNIST, última col = etiqueta) ─────────────────
+  python run.py cli --csv --train data/mnist_train.csv --test data/mnist_test.csv
+
+── Réplica completa ──────────────────────────────────────────────────
   python run.py cli --full
-  python run.py cli --generations 50 --pop-size 100 --max-epochs 500
-  python run.py cli --full --workers 0          # multicore, sin dashboard
-  python run.py cli --no-dual                   # solo pesos base
+  python run.py cli --full --workers 0    # multicore
 
+── Dashboard ─────────────────────────────────────────────────────────
   python run.py server
-  python run.py server --generations 50 --pop-size 100 --max-epochs 500
+  python run.py server --train-images data/... --train-labels data/...
 """
 
 import os
 import sys
 
-CLI_DEFAULTS = (
-    "--dataset optdigits "
-    "--train data/optdigits.tra "
-    "--test data/optdigits.tes "
-    "--generations 10 "
-    "--pop-size 20 "
-    "--max-epochs 50"
+# Defaults para IDX binario (estructura de carpeta estándar MNIST)
+CLI_DEFAULTS_IDX = (
+    "--train-images data/train-images-idx3-ubyte "
+    "--train-labels data/train-labels-idx1-ubyte "
+    "--test-images  data/t10k-images-idx3-ubyte  "
+    "--test-labels  data/t10k-labels-idx1-ubyte  "
+    "--generations 10 --pop-size 20 --max-epochs 50"
 )
 
-SERVER_DEFAULTS = (
-    "--dataset optdigits "
-    "--train data/optdigits.tra "
-    "--test data/optdigits.tes "
-    "--generations 50 "
-    "--pop-size 100 "
-    "--max-epochs 500"
+SERVER_DEFAULTS_IDX = (
+    "--train-images data/train-images-idx3-ubyte "
+    "--train-labels data/train-labels-idx1-ubyte "
+    "--test-images  data/t10k-images-idx3-ubyte  "
+    "--test-labels  data/t10k-labels-idx1-ubyte  "
+    "--generations 50 --pop-size 100 --max-epochs 500"
 )
 
 
@@ -58,9 +65,9 @@ if __name__ == "__main__":
     extra = " ".join(sys.argv[2:])
 
     if mode == "server":
-        run_server(extra or SERVER_DEFAULTS)
+        run_server(extra or SERVER_DEFAULTS_IDX)
     elif mode == "cli":
-        run_cli(extra or CLI_DEFAULTS)
+        run_cli(extra or CLI_DEFAULTS_IDX)
     else:
         print(f"Modo desconocido: '{mode}'  —  usa 'server' o 'cli'")
         sys.exit(1)
