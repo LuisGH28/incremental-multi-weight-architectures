@@ -1,15 +1,14 @@
 """
 domain/model/mlp.py
 ====================
-MLP con cuatro líneas de peso: w + fw¹ + fw² + fw³.
+MLP with four weight lines: w + fw1 + fw2 + fw3.
 
-La única diferencia respecto al MLP de fw³-OptDigits es que
-`n_inputs` es un parámetro de construcción en lugar de estar
-fijo a 64. Esto permite usar el mismo MLP con:
-  - OptDigits : n_inputs=64,  normalización /16.0
-  - MNIST     : n_inputs=784, normalización /255.0
+The only difference from the fw3 OptDigits MLP is that `n_inputs` is a
+constructor parameter rather than a fixed 64. This lets the same model handle:
+  - OptDigits: n_inputs=64, normalized by 16.0
+  - MNIST:     n_inputs=784, normalized by 255.0
 
-Ninguna ecuación de entrenamiento, backprop ni lógica evolutiva cambia.
+Training equations, backpropagation, and evolutionary logic are unchanged.
 """
 from __future__ import annotations
 
@@ -27,7 +26,7 @@ class MLP:
         g: Genotype,
         use_dual: bool = True,
         rng=None,
-        n_inputs: int = 784,   # 784 para MNIST, 64 para OptDigits
+        n_inputs: int = 784,   # 784 for MNIST, 64 for OptDigits.
     ):
         if rng is None:
             rng = np.random.default_rng()
@@ -59,8 +58,6 @@ class MLP:
             self.fw3_ih = np.zeros_like(self.w_ih)
             self.fw3_ho = np.zeros_like(self.w_ho)
 
-    # ── Forward ───────────────────────────────────────────────────────────────
-
     def forward(self, x: np.ndarray):
         if self.use_dual:
             eff_ih = self.w_ih + self.fw_ih + self.fw2_ih + self.fw3_ih
@@ -74,8 +71,6 @@ class MLP:
         h_b    = np.concatenate(([1.0], hidden))
         out    = sigmoid(h_b @ eff_ho)
         return x_b, hidden, h_b, out
-
-    # ── Entrenamiento de una sesión ───────────────────────────────────────────
 
     def train_session(
         self,
@@ -198,8 +193,6 @@ class MLP:
                 session=session_idx, epochs_run=max_epochs,
             )
         return max_epochs
-
-    # ── Métricas ──────────────────────────────────────────────────────────────
 
     def accuracy(self, X: np.ndarray, y: np.ndarray) -> float:
         return sum(

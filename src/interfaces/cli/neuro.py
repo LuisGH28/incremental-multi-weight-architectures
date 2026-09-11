@@ -3,23 +3,23 @@
 """
 interfaces/cli/neuro.py  —  fw³-MNIST (w + fw¹ + fw² + fw³)
 
-Uso con IDX binario (formato oficial MNIST):
+Usage with binary IDX files (official MNIST format):
     python run.py cli \\
         --train-images data/train-images-idx3-ubyte \\
         --train-labels data/train-labels-idx1-ubyte \\
         --test-images  data/t10k-images-idx3-ubyte  \\
         --test-labels  data/t10k-labels-idx1-ubyte
 
-Uso con CSV (Kaggle MNIST, última col = etiqueta):
+Usage with CSV files (Kaggle MNIST, last column = label):
     python run.py cli --csv \\
         --train data/mnist_train.csv \\
         --test  data/mnist_test.csv
 
-Uso con CSV (primera col = etiqueta):
+Usage with CSV files (first column = label):
     python run.py cli --csv --label-first \\
         --train data/mnist_train.csv --test data/mnist_test.csv
 
-Réplica completa:
+Full replication:
     python run.py cli --full
 """
 from __future__ import annotations
@@ -42,14 +42,12 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # ── Modo de entrada ───────────────────────────────────────────────────────
     mode_grp = ap.add_argument_group("Formato de datos")
     mode_grp.add_argument("--csv", action="store_true",
                           help="Leer CSV en lugar de IDX binario")
     mode_grp.add_argument("--label-first", action="store_true",
                           help="En CSV, la primera columna es la etiqueta (no la última)")
 
-    # ── Rutas IDX ─────────────────────────────────────────────────────────────
     idx_grp = ap.add_argument_group("Rutas IDX binario (formato oficial MNIST)")
     idx_grp.add_argument("--train-images", default=None,
                          help="Archivo de imágenes de entrenamiento (.ubyte/.gz)")
@@ -60,16 +58,13 @@ def main():
     idx_grp.add_argument("--test-labels",  default=None,
                          help="Archivo de etiquetas de prueba (.ubyte/.gz)")
 
-    # ── Rutas CSV ─────────────────────────────────────────────────────────────
     csv_grp = ap.add_argument_group("Rutas CSV")
     csv_grp.add_argument("--train", default=None, help="CSV de entrenamiento")
     csv_grp.add_argument("--test",  default=None, help="CSV de prueba")
 
-    # ── Directorio raíz (alternativa a rutas explícitas) ─────────────────────
     ap.add_argument("--data-dir", default="./data",
                     help="Directorio raíz donde buscar los archivos MNIST")
 
-    # ── Evolución ─────────────────────────────────────────────────────────────
     ap.add_argument("--generations",   type=int,   default=50)
     ap.add_argument("--full",          action="store_true",
                     help="1800 gen / pop=100 / epochs=5000")
@@ -83,7 +78,6 @@ def main():
     ap.add_argument("--workers",       type=int,   default=0,
                     help="CPUs paralelas (0=auto). Desactivado en modo --dashboard")
 
-    # ── Salida ────────────────────────────────────────────────────────────────
     ap.add_argument("--out-prefix", default="fw3_mnist")
     ap.add_argument("--tri-runs",   type=int, default=5)
     ap.add_argument("--dir-data",   default="result")
@@ -106,7 +100,6 @@ def main():
     log_fn, log_detail_fn = make_log_fns(logger)
     publisher = EventPublisher(dashboard_mode=args.dashboard)
 
-    # ── Carga de datos ────────────────────────────────────────────────────────
     if args.csv:
         log_fn("Formato: CSV")
         X_train, y_train, X_test, y_test = load_dataset(

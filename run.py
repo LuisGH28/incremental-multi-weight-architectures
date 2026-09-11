@@ -8,21 +8,21 @@ Uso:
   python run.py cli    [opciones]
   python run.py server [opciones]
 
-── Formato IDX binario (oficial MNIST) ──────────────────────────────
+Binary IDX format (official MNIST):
   python run.py cli \\
       --train-images data/train-images-idx3-ubyte \\
       --train-labels data/train-labels-idx1-ubyte \\
       --test-images  data/t10k-images-idx3-ubyte  \\
       --test-labels  data/t10k-labels-idx1-ubyte
 
-── Formato CSV (Kaggle MNIST, última col = etiqueta) ─────────────────
+CSV format (Kaggle MNIST, last column = label):
   python run.py cli --csv --train data/mnist_train.csv --test data/mnist_test.csv
 
-── Réplica completa ──────────────────────────────────────────────────
+Full replication:
   python run.py cli --full
   python run.py cli --full --workers 0    # multicore
 
-── Dashboard ─────────────────────────────────────────────────────────
+Dashboard:
   python run.py server
   python run.py server --train-images data/... --train-labels data/...
 """
@@ -30,7 +30,7 @@ Uso:
 import os
 import sys
 
-# Defaults para IDX binario (estructura de carpeta estándar MNIST)
+# Defaults for the standard MNIST IDX directory layout.
 CLI_DEFAULTS_IDX = (
     "--train-images data/train-images-idx3-ubyte "
     "--train-labels data/train-labels-idx1-ubyte "

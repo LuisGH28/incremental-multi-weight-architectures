@@ -1,10 +1,10 @@
 """
 domain/services/evaluation_service.py
 =======================================
-Evaluación de individuos y matriz triangular para fw³-MNIST.
+Individual evaluation and triangular matrix computation for fw3 MNIST.
 
-Diferencia respecto a fw³-OptDigits: todas las funciones que instancian
-MLP reciben y propagan `n_inputs` (784 para MNIST, 64 para OptDigits).
+Compared with fw3 OptDigits, every function that instantiates MLP receives and
+propagates `n_inputs` (784 for MNIST, 64 for OptDigits).
 """
 from __future__ import annotations
 

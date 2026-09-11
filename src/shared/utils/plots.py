@@ -1,8 +1,8 @@
 """
 shared/utils/plots.py
 ======================
-Gráficas para fw³ — réplica extendida de Figure 1 Bullinaria (2009)
-con panel de parámetros fw¹ + fw² + fw³.
+Plots for the fw3 extension, including the Bullinaria (2009) Figure 1 style
+parameter panel for fw1 + fw2 + fw3.
 """
 from __future__ import annotations
 import numpy as np

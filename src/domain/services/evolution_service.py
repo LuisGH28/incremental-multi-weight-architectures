@@ -1,12 +1,14 @@
 """
 domain/services/evolution_service.py
 ======================================
-Bucle evolutivo para fw³-MNIST.
+Evolution loop for fw3 MNIST.
 
-Idéntico al de fw³-OptDigits excepto que:
-  - n_inputs se deriva de X_train.shape[1] (784 para MNIST, 64 para OptDigits)
-  - n_inputs se propaga a MLP, _eval_worker, evaluate_individual y evaluate_triangular
-  - El dashboard emite n_inputs para que el SVG muestre "784 inputs" en lugar de "64"
+This mirrors the fw3 OptDigits loop, except:
+  - n_inputs is derived from X_train.shape[1] (784 for MNIST, 64 for OptDigits)
+  - n_inputs is propagated into MLP, _eval_worker, evaluate_individual, and
+    evaluate_triangular
+  - the dashboard emits n_inputs so architecture views show the actual input
+    dimensionality
 """
 from __future__ import annotations
 
@@ -30,10 +32,6 @@ from src.infrastructure.data.incremental_splitter import split_incremental
 from src.infrastructure.events.stdout_event_publisher import EventPublisher
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Worker multiprocessing
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _eval_worker(args):
     idx, g_arr, sessions_xy, val_xy, use_dual, max_epochs, seed, n_inputs = args
     rng      = np.random.default_rng(seed)
@@ -45,10 +43,6 @@ def _eval_worker(args):
         net.train_session(Xs, ys, max_epochs=max_epochs)
     return idx, net.accuracy(val[0], val[1])
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _elapsed_str(seconds: float) -> str:
     td = timedelta(seconds=int(seconds))
@@ -62,10 +56,6 @@ def _elapsed_str(seconds: float) -> str:
     parts.append(f"{s}s")
     return " ".join(parts)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Historial de evolución
-# ─────────────────────────────────────────────────────────────────────────────
 
 class EvoHistory:
     def __init__(self):
@@ -104,10 +94,6 @@ class EvoHistory:
         self.test_acc.append(test_acc_val * 100.0 if test_acc_val is not None else float("nan"))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Bucle principal
-# ─────────────────────────────────────────────────────────────────────────────
-
 def run_evolution(
     X_train, y_train, X_test, y_test,
     pop_size=100, n_generations=50, use_dual=True,
@@ -124,7 +110,7 @@ def run_evolution(
     if log_fn        is None: log_fn        = print
     if log_detail_fn is None: log_detail_fn = lambda _: None
 
-    # n_inputs se toma del dato real — única diferencia con OptDigits
+    # The real input dimensionality keeps MNIST and OptDigits experiments on the same code path.
     n_inputs = X_train.shape[1]
 
     def emit(event_type, **kwargs):
@@ -251,7 +237,6 @@ def run_evolution(
         population = survivors + children
         fitness    = np.zeros(pop_size)
 
-    # ── Evaluación final ──────────────────────────────────────────────────────
     log_fn("\n[Evaluación final sobre test set...]")
     emit("final_start")
 

@@ -16,12 +16,10 @@ export function setupNavigation() {
 }
 
 export function setupLucideIcons() {
-  // Inicializar Lucide Icons (reemplaza <i data-lucide="..."> por SVG)
   document.addEventListener('DOMContentLoaded', () => {
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
     }
   });
-  // También llamar después de actualizar contenido dinámico (si se necesita)
   setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 200);
 }

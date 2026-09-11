@@ -1,13 +1,13 @@
 """
 domain/model/genotype.py
 ========================
-Genotipo para la arquitectura fw³ (w + fw¹ + fw² + fw³).
+Genotype for the fw3 architecture (w + fw1 + fw2 + fw3).
 
-Extiende fw² añadiendo un tercer par (fw3_decay δ₃, fw3_scale σ₃)
-para la línea de fast-weight semi-lenta.
+This extends fw2 with a third pair, fw3_decay and fw3_scale, for the
+semi-slow fast-weight line.
 
-El fenómeno central de esta extensión es que δ₃ converge a 0.0,
-creando una memoria de sesión permanente emergente no programada.
+The central phenomenon in this extension is that fw3_decay can converge toward
+0.0, creating emergent persistent session memory without programming it in.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -16,34 +16,32 @@ import numpy as np
 
 @dataclass
 class Genotype:
-    # ── Topología ─────────────────────────────────────────────────────────────
+    # Topology
     n_hid: float
     c_ih:  float;  c_ho:  float
 
-    # ── Tasas de aprendizaje (4 componentes) ──────────────────────────────────
+    # Learning rates for the four trainable components.
     eta_ih: float;  eta_hb: float
     eta_ho: float;  eta_ob: float
 
-    # ── Distribuciones iniciales de pesos ─────────────────────────────────────
+    # Initial weight distributions.
     l_ih: float;  u_ih: float
     l_hb: float;  u_hb: float
     l_ho: float;  u_ho: float
     l_ob: float;  u_ob: float
 
-    # ── Regularización ────────────────────────────────────────────────────────
+    # Regularization and stopping tolerances.
     ospo:  float;  lam:   float
     tol_t: float;  tol_s: float
 
-    # ── fw¹ — Bullinaria (2009) corto plazo ───────────────────────────────────
+    # fw1 follows Bullinaria's short-term fast-weight line.
     fw_decay:  float;  fw_scale:  float
 
-    # ── fw² — extensión previa, medio plazo ───────────────────────────────────
+    # fw2 is the previous medium-term extension.
     fw2_decay: float;  fw2_scale: float
 
-    # ── fw³ — esta extensión, semi-largo plazo ────────────────────────────────
+    # fw3 is the semi-long-term extension evaluated here.
     fw3_decay: float;  fw3_scale: float
-
-    # ──────────────────────────────────────────────────────────────────────────
 
     @staticmethod
     def random(rng) -> "Genotype":
@@ -59,9 +57,9 @@ class Genotype:
             l_ob=r(0, 1),      u_ob=r(0, 1),
             ospo=r(0, 0.2),    lam=r(0, 0.001),
             tol_t=r(0, 0.5),   tol_s=r(0, 1.0),
-            fw_decay=r(0, 0.2),    fw_scale=r(2, 20),    # fw¹ rápido
-            fw2_decay=r(0, 0.05),  fw2_scale=r(1, 10),   # fw² medio
-            fw3_decay=r(0, 0.01),  fw3_scale=r(0.5, 5),  # fw³ lento
+            fw_decay=r(0, 0.2),    fw_scale=r(2, 20),    # fast fw1 line
+            fw2_decay=r(0, 0.05),  fw2_scale=r(1, 10),   # medium fw2 line
+            fw3_decay=r(0, 0.01),  fw3_scale=r(0.5, 5),  # slow fw3 line
         )
 
     def as_array(self) -> np.ndarray:
