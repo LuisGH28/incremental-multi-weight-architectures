@@ -71,11 +71,15 @@ function validateShape(event) {
  * @returns {AdapterResult}
  */
 export function adaptSseMessage(raw) {
+  if (raw === '') {
+    return { ok: false, error: 'Empty SSE data event.', raw };
+  }
+
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { ok: false, error: 'Invalid JSON event payload.', raw };
+    return { ok: false, error: `Invalid JSON event payload: ${raw.slice(0, 80)}`, raw };
   }
 
   if (!isRecord(parsed)) {

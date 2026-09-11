@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-run.py — Punto de entrada del experimento fw³
-==============================================
+Top-level entry point for the fw3 experiment.
 
-Uso:
-  python run.py cli    [opciones]   → ejecución en terminal
-  python run.py server [opciones]  → dashboard en http://localhost:8765
+Usage:
+  python run.py cli    [options]   -> terminal execution
+  python run.py server [options]   -> dashboard at http://localhost:8765
 
-Ejemplos:
+Examples:
   python run.py cli
   python run.py cli --full
   python run.py cli --generations 50 --pop-size 100 --max-epochs 500
-  python run.py cli --full --workers 0          # multicore, sin dashboard
-  python run.py cli --no-dual                   # solo pesos base
+  python run.py cli --full --workers 0
+  python run.py cli --no-dual
 
   python run.py server
   python run.py server --generations 50 --pop-size 100 --max-epochs 500

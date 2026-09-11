@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-interfaces/cli/neuro.py  —  fw³ (w + fw¹ + fw² + fw³)
+CLI runner for the fw3 experiment: w + fw1 + fw2 + fw3.
 
-Uso rápido:
+Quick run:
     python run.py cli
 
-Réplica completa (1800 gen):
+Full replica budget:
     python run.py cli --full
 
-Con workers paralelos (CLI only, no dashboard):
+Parallel workers are available only outside dashboard mode:
     python run.py cli --full --workers 0
 """
 from __future__ import annotations

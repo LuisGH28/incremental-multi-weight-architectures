@@ -1,12 +1,9 @@
 """
-infrastructure/data/incremental_splitter.py
-============================================
-Divide el conjunto de entrenamiento en sesiones incrementales al estilo
-de Bullinaria (2009):
+Split the training set into Bullinaria-style incremental sessions:
 
-  - 6 sesiones de 200 patrones (20 por clase × 10 clases)
-  - Un conjunto de validación con el resto de los patrones de entrenamiento
-  - Muestreo estratificado y sin reemplazo
+  - 6 sessions of 200 patterns each (20 per class x 10 classes)
+  - a validation set built from the remaining training patterns
+  - stratified sampling without replacement
 """
 from __future__ import annotations
 
@@ -19,18 +16,15 @@ def split_incremental(
     X: np.ndarray,
     y: np.ndarray,
     n_sessions:  int = 6,
-    ppc:         int = 20,      # patrones por clase por sesión
+    ppc:         int = 20,
     num_classes: int = 10,
     rng=None,
 ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], Tuple[np.ndarray, np.ndarray]]:
     """
-    Divide (X, y) en:
-      sessions — lista de n_sessions tuples (X_s, y_s), cada uno con
-                 ppc * num_classes patrones balanceados por clase.
-      val      — tuple (X_val, y_val) con los patrones restantes.
+    Return balanced incremental sessions plus a validation split.
 
-    Los índices se barajan de forma independiente por clase para
-    garantizar que cada sesión tenga exactamente ppc ejemplos de cada dígito.
+    Class indices are shuffled independently so each session receives exactly
+    ppc examples per digit.
     """
     if rng is None:
         rng = np.random.default_rng()

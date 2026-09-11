@@ -1,11 +1,9 @@
 """
-infrastructure/data/dataset_loader.py
-=======================================
-Cargador unificado de datasets.
+Dataset loader for MIRAGE experiments.
 
-Para este experimento (fw²) el dataset principal es OptDigits UCI.
-El loader acepta la misma interfaz que el proyecto base para facilitar
-la integración futura con otros datasets.
+The active experiment uses UCI OptDigits. The function signature keeps the
+same extension point as the original project so additional datasets can be
+integrated later without changing callers.
 """
 from __future__ import annotations
 
@@ -16,10 +14,6 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# OptDigits (CSV propio de Bullinaria 2009)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _load_optdigits_csv(
     path: str,
@@ -54,10 +48,6 @@ def _load_optdigits(
     return X_train, y_train, X_test, y_test
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Entrada pública
-# ─────────────────────────────────────────────────────────────────────────────
-
 def load_dataset(
     name: str = "optdigits",
     data_dir: str = "./data",
@@ -65,12 +55,9 @@ def load_dataset(
     tes_path: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Carga un dataset y devuelve (X_train, y_train, X_test, y_test).
+    Load a dataset and return (X_train, y_train, X_test, y_test).
 
-    name      — identificador del dataset (actualmente solo 'optdigits')
-    data_dir  — directorio raíz donde buscar los archivos
-    tra_path  — ruta explícita al archivo de entrenamiento (opcional)
-    tes_path  — ruta explícita al archivo de prueba (opcional)
+    Only 'optdigits' is currently supported by the active experiment.
     """
     if name == "optdigits":
         return _load_optdigits(data_dir, tra_path, tes_path)

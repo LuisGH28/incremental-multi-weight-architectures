@@ -1,8 +1,8 @@
 """
-domain/services/evaluation_service.py
-=======================================
-Evaluación de individuos y generación de la matriz triangular para fw³.
-Idéntico en estructura a fw² pero opera con el MLP de 4 líneas de peso.
+Individual evaluation and triangular-matrix generation for the fw3 model.
+
+The triangular matrix measures retention across incremental sessions and is
+used to compare the experiment with Bullinaria-style evaluations.
 """
 from __future__ import annotations
 

@@ -1,6 +1,4 @@
-/* -------------------------------------------------------------
-     DESIGN SYSTEM (CLARO / DASHBOARD MODERNO)
-  ------------------------------------------------------------- */
+/* Dashboard design tokens */
   *,
   *::before,
   *::after {
@@ -10,7 +8,7 @@
   }
 
   :root {
-    /* COLORES - Tema claro */
+    /* Light theme */
     --color-bg: #ffffff;
     --color-surface: #f8fafc;
     --color-card-bg: #ffffff;
@@ -25,14 +23,14 @@
     --color-border: #e2e8f0;
     --color-border-soft: #f1f5f9;
 
-    /* TIPOGRAFÍA */
+    /* Typography */
     --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif;
     --font-title: 1.75rem;
     --font-subtitle: 1.25rem;
     --font-body: 0.875rem;
     --font-small: 0.75rem;
 
-    /* ESPACIADO (spacing system) */
+    /* Spacing */
     --space-xs: 0.25rem;   /* 4px */
     --space-sm: 0.5rem;    /* 8px */
     --space-md: 1rem;      /* 16px */
@@ -40,7 +38,7 @@
     --space-xl: 2rem;      /* 32px */
     --space-2xl: 2.5rem;   /* 40px */
 
-    /* BORDES Y SOMBRAS */
+    /* Borders and shadows */
     --radius-sm: 0.5rem;
     --radius: 0.75rem;
     --radius-lg: 1rem;
@@ -59,14 +57,13 @@
     scroll-behavior: smooth;
   }
 
-  /* Contenedor principal */
   .app-container {
     max-width: 1400px;
     margin: 0 auto;
     padding: var(--space-lg);
   }
 
-  /* ========== TIPOGRAFÍA con iconos inline ========== */
+  /* Typography */
   h1, h2, h3 {
     font-weight: 600;
     letter-spacing: -0.01em;
@@ -105,7 +102,7 @@
     vertical-align: middle;
   }
 
-  /* ========== COMPONENTES REUTILIZABLES ========== */
+  /* Reusable layout components */
   .card {
     background: var(--color-card-bg);
     border: 1px solid var(--color-border);
@@ -148,7 +145,7 @@
     gap: var(--space-md);
   }
 
-  /* navbar moderno */
+  /* Navigation */
   .navbar {
     background: var(--color-card-bg);
     border-bottom: 1px solid var(--color-border);
@@ -203,7 +200,7 @@
     background: var(--color-primary-light);
     color: var(--color-primary);
   }
-  /* status pill */
+  /* Connection status */
   .status-pill {
     background: var(--color-surface);
     padding: var(--space-xs) var(--space-md);
@@ -222,7 +219,7 @@
     color: var(--color-primary);
   }
 
-  /* metricas elegantes */
+  /* Experiment metrics */
   .metric-card {
     background: var(--color-surface);
     border-radius: var(--radius);
@@ -250,7 +247,7 @@
 	    color: var(--color-accent);
 	  }
 
-  /* Barra de progreso */
+  /* Generation progress */
   .progress-wrapper {
     background: var(--color-border);
     border-radius: 20px;
@@ -273,7 +270,7 @@
 	    margin-top: var(--space-lg);
 	  }
 
-  /* población (fitness strip) */
+  /* Population fitness strip */
   .pop-strip {
     display: flex;
     gap: 6px;
@@ -307,7 +304,7 @@
 	  .legend-mid { background: #f59e0b; }
 	  .legend-low { background: #e05a3a; }
 
-  /* Genotipo grid */
+  /* Genotype grid */
   .geno-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -329,7 +326,7 @@
     font-family: monospace;
   }
 
-  /* session log */
+  /* Session log */
   .session-log {
     background: var(--color-surface);
     border-radius: var(--radius);
@@ -348,7 +345,7 @@
   .ev-epoch { color: #6c757d; }
   .ev-done { color: var(--color-secondary); }
 
-  /* responsive: hamburguesa */
+  /* Responsive layout */
   .menu-toggle {
     display: none;
     background: none;
@@ -385,7 +382,7 @@
     }
   }
 
-  /* flow svg y gráficos responsivos */
+  /* Research visualizations */
 	  .flow-svg-wrap {
 	    overflow-x: auto;
 	  }
@@ -512,7 +509,7 @@
     position: relative;
   }
 
-  /* final banner */
+  /* Final result */
 	  .final-banner {
     background: linear-gradient(135deg, var(--color-primary-light), #e6f7ec);
     border: 1px solid var(--color-primary);
@@ -537,7 +534,7 @@
     padding-top: var(--space-lg);
   }
 
-  /* utilidades */
+  /* Utilities */
   .text-muted { color: var(--color-muted); }
   .mt-2 { margin-top: var(--space-md); }
   .mb-1 { margin-bottom: var(--space-sm); }

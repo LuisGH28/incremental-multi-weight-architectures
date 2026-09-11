@@ -1,16 +1,14 @@
 """
-domain/model/mlp.py
-====================
-MLP con arquitectura de cuatro líneas de peso: w + fw¹ + fw² + fw³.
+MLP with four weight lines: w + fw1 + fw2 + fw3.
 
-  - w    : pesos permanentes (slow weights)
-  - fw¹  : fast-weight corto plazo — Bullinaria (2009), decay δ₁, scale σ₁
-  - fw²  : fast-weight medio plazo — extensión previa,  decay δ₂, scale σ₂
-  - fw³  : fast-weight semi-largo  — esta extensión,    decay δ₃, scale σ₃
+  - w    : permanent slow weights
+  - fw1  : short-term fast weights from Bullinaria (2009), decay delta1, scale sigma1
+  - fw2  : medium-term fast weights, decay delta2, scale sigma2
+  - fw3  : semi-long-term fast weights, decay delta3, scale sigma3
 
-El fenómeno δ₃→0 es la contribución central: la evolución descubre
-que la tercera línea debe actuar como memoria permanente de sesión,
-creando espontáneamente tres escalas temporales distintas.
+The central experimental signal is delta3 -> 0: evolution discovers that the
+third fast-weight line should behave as persistent session memory, producing
+three distinct temporal scales without hard-coding them into the training loop.
 """
 from __future__ import annotations
 
@@ -43,14 +41,12 @@ class MLP:
         self.w_ho[1:] *= self.mask_ho
 
         if use_dual:
-            self.fw_ih  = np.zeros_like(self.w_ih)   # fw¹
+            self.fw_ih  = np.zeros_like(self.w_ih)   # fw1
             self.fw_ho  = np.zeros_like(self.w_ho)
-            self.fw2_ih = np.zeros_like(self.w_ih)   # fw²
+            self.fw2_ih = np.zeros_like(self.w_ih)   # fw2
             self.fw2_ho = np.zeros_like(self.w_ho)
-            self.fw3_ih = np.zeros_like(self.w_ih)   # fw³
+            self.fw3_ih = np.zeros_like(self.w_ih)   # fw3
             self.fw3_ho = np.zeros_like(self.w_ho)
-
-    # ── Forward ───────────────────────────────────────────────────────────────
 
     def forward(self, x: np.ndarray):
         if self.use_dual:
@@ -65,8 +61,6 @@ class MLP:
         h_b    = np.concatenate(([1.0], hidden))
         out    = sigmoid(h_b @ eff_ho)
         return x_b, hidden, h_b, out
-
-    # ── Entrenamiento de una sesión ───────────────────────────────────────────
 
     def train_session(
         self,
@@ -95,13 +89,12 @@ class MLP:
         total_ce = 0.0
 
         for epoch in range(max_epochs):
-            # ── Decay de fast-weights ─────────────────────────────────────────
             if self.use_dual:
                 self.fw_ih  *= (1.0 - g.fw_decay)
                 self.fw_ho  *= (1.0 - g.fw_decay)
                 self.fw2_ih *= (1.0 - g.fw2_decay)
                 self.fw2_ho *= (1.0 - g.fw2_decay)
-                self.fw3_ih *= (1.0 - g.fw3_decay)   # δ₃ → 0 = memoria permanente
+                self.fw3_ih *= (1.0 - g.fw3_decay)   # delta3 -> 0 behaves as persistent session memory.
                 self.fw3_ho *= (1.0 - g.fw3_decay)
 
             if g.lam > 0:
@@ -124,7 +117,6 @@ class MLP:
                     correct += 1
                     continue
 
-                # ── Backpropagation ───────────────────────────────────────────
                 delta_o = out - t
                 eff_ho  = (self.w_ho + self.fw_ho) if self.use_dual else self.w_ho
                 delta_h = (eff_ho[1:] @ delta_o) * dsigmoid_from_output(hidden, g.ospo)
@@ -134,14 +126,13 @@ class MLP:
                 grad_ih[1:] *= self.mask_ih
                 grad_ho[1:] *= self.mask_ho
 
-                # w — pesos lentos
                 self.w_ho    -= g.eta_ho * grad_ho
                 self.w_ho[0] -= g.eta_ob * delta_o
                 self.w_ih    -= g.eta_ih * grad_ih
                 self.w_ih[0] -= g.eta_hb * delta_h
 
                 if self.use_dual:
-                    # fw¹ — corto plazo (σ₁·η, decay δ₁)
+                    # fw1: short-term memory, scaled by sigma1 and decayed by delta1.
                     self.fw_ho    -= (g.fw_scale * g.eta_ho) * grad_ho
                     self.fw_ho[0] -= (g.fw_scale * g.eta_ob) * delta_o
                     self.fw_ih    -= (g.fw_scale * g.eta_ih) * grad_ih
@@ -149,7 +140,7 @@ class MLP:
                     self.fw_ih[1:]  *= self.mask_ih
                     self.fw_ho[1:]  *= self.mask_ho
 
-                    # fw² — medio plazo (σ₂·η, decay δ₂)
+                    # fw2: medium-term memory, scaled by sigma2 and decayed by delta2.
                     self.fw2_ho    -= (g.fw2_scale * g.eta_ho) * grad_ho
                     self.fw2_ho[0] -= (g.fw2_scale * g.eta_ob) * delta_o
                     self.fw2_ih    -= (g.fw2_scale * g.eta_ih) * grad_ih
@@ -157,7 +148,7 @@ class MLP:
                     self.fw2_ih[1:] *= self.mask_ih
                     self.fw2_ho[1:] *= self.mask_ho
 
-                    # fw³ — semi-largo plazo (σ₃·η, decay δ₃→0)
+                    # fw3: semi-long-term memory, scaled by sigma3 and evolved toward low decay.
                     self.fw3_ho    -= (g.fw3_scale * g.eta_ho) * grad_ho
                     self.fw3_ho[0] -= (g.fw3_scale * g.eta_ob) * delta_o
                     self.fw3_ih    -= (g.fw3_scale * g.eta_ih) * grad_ih
@@ -190,8 +181,6 @@ class MLP:
                 session=session_idx, epochs_run=max_epochs,
             )
         return max_epochs
-
-    # ── Métricas ──────────────────────────────────────────────────────────────
 
     def accuracy(self, X: np.ndarray, y: np.ndarray) -> float:
         correct = sum(

@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-interfaces/http/server.py
-==========================
-Servidor HTTP/SSE para el dashboard fw³.
+HTTP/SSE server for the fw3 dashboard.
 
-Lanza src/interfaces/cli/neuro.py como subproceso y reenvía
-su stdout (eventos JSON) al navegador vía Server-Sent Events.
+The server launches src/interfaces/cli/neuro.py as a subprocess and forwards
+structured JSON telemetry from stdout to the browser through Server-Sent Events.
+Human-readable stdout/stderr remains terminal/log output.
 
-Uso:
+Usage:
     python run.py server
     python run.py server --generations 50 --pop-size 100 --max-epochs 500
 
-Luego abrir:  http://localhost:8765/dashboard.html
+Then open: http://localhost:8765/dashboard.html
 """
 
 import argparse
@@ -30,7 +29,6 @@ from src.infrastructure.events.stdout_event_publisher import NeuroLogger
 
 DASHBOARD_DIR = Path(__file__).resolve().parents[3] / "dashboard"
 
-# ── Estado global compartido ──────────────────────────────────────────────────
 _events: list      = []
 _events_lock       = threading.Lock()
 _subscribers: list = []
@@ -49,13 +47,21 @@ def _broadcast(line: str) -> None:
                 pass
 
 
-def _drain_stderr(proc: subprocess.Popen, logger: NeuroLogger) -> None:
+def _is_json_event_line(line: str) -> bool:
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(payload, dict) and isinstance(payload.get("type"), str)
+
+
+def _drain_stderr(proc: subprocess.Popen) -> None:
     if proc.stderr is None:
         return
     for line in proc.stderr:
         line = line.rstrip()
         if line:
-            logger.warn(line)
+            print(line, file=sys.stderr, flush=True)
 
 
 def _run_script(cmd: list, logger: NeuroLogger) -> None:
@@ -67,14 +73,15 @@ def _run_script(cmd: list, logger: NeuroLogger) -> None:
     )
     stderr_thread = threading.Thread(
         target=_drain_stderr,
-        args=(proc, logger),
+        args=(proc,),
         daemon=True,
     )
     stderr_thread.start()
     for line in proc.stdout:
         line = line.rstrip()
         if line:
-            _broadcast(line)
+            if _is_json_event_line(line):
+                _broadcast(line)
             logger.handle(line)
     proc.wait()
     _done.set()
@@ -84,17 +91,14 @@ def _run_script(cmd: list, logger: NeuroLogger) -> None:
     logger.close()
 
 
-# ── Handler HTTP ──────────────────────────────────────────────────────────────
-
 class Handler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
-        pass  # silencia el log de acceso
+        pass
 
     def do_GET(self):
         path = self.path.split("?")[0]
 
-        # ── Sirve dashboard estático ──────────────────────────────────────────
         if path in ("/", "/dashboard.html", "/index.html"):
             return self._serve_static(DASHBOARD_DIR / "index.html", "text/html; charset=utf-8")
 
@@ -105,7 +109,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             return self._serve_static(requested)
 
-        # ── SSE /events ───────────────────────────────────────────────────────
         if path == "/events":
             self.send_response(200)
             self.send_header("Content-Type",  "text/event-stream")
@@ -117,7 +120,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with _subs_lock:
                 _subscribers.append(q)
 
-            # Heartbeat inmediato — confirma conexión al browser antes del replay
+            # Send a comment heartbeat before replay so the browser sees the stream as open.
             try:
                 self.wfile.write(": heartbeat\n\n".encode())
                 self.wfile.flush()
@@ -127,7 +130,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     except ValueError: pass
                 return
 
-            # Replay de eventos anteriores (clientes que se conectan tarde)
+            # Late dashboard clients need the already-emitted experiment state.
             with _events_lock:
                 buffered = list(_events)
             for line in buffered:
@@ -137,7 +140,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except Exception:
                     break
 
-            # Streaming de nuevos eventos
             last_heartbeat = time.time()
             try:
                 while True:
@@ -147,12 +149,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self.wfile.flush()
                         last_heartbeat = time.time()
                     elif _done.is_set() and not q:
-                        # Esperar 3 s extra para que el browser procese server_done
+                        # Give the browser a short grace period to process server_done.
                         time.sleep(3.0)
                         break
                     else:
                         time.sleep(0.05)
-                        # Heartbeat cada 15 s para mantener la conexión viva
+                        # Comment heartbeats keep long-running experiments from timing out.
                         if time.time() - last_heartbeat > 15:
                             self.wfile.write(": heartbeat\n\n".encode())
                             self.wfile.flush()
@@ -184,26 +186,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-# ── Punto de entrada ──────────────────────────────────────────────────────────
-
 def main():
     ap = argparse.ArgumentParser(
         description="Dashboard SSE para neuroevolución fw³"
     )
-    # ── Dataset ───────────────────────────────────────────────────────────────
     ap.add_argument("--dataset",    default="optdigits",
                     choices=["optdigits"])
     ap.add_argument("--data-dir",   default="./data")
     ap.add_argument("--train",      default=None)
     ap.add_argument("--test",       default=None)
-    # ── Evolución ─────────────────────────────────────────────────────────────
     ap.add_argument("--generations",   type=int, default=50)
     ap.add_argument("--pop-size",      type=int, default=100)
     ap.add_argument("--max-epochs",    type=int, default=500)
     ap.add_argument("--no-dual",       action="store_true")
     ap.add_argument("--seed",          type=int, default=42)
     ap.add_argument("--verbose-indiv", type=int, default=3)
-    # ── Servidor ──────────────────────────────────────────────────────────────
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--log",  type=str, default="neuroevo.log",
                     help="Ruta del archivo .log")

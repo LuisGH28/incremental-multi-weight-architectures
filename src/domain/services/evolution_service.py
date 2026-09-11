@@ -1,10 +1,8 @@
 """
-domain/services/evolution_service.py
-======================================
-Bucle principal de neuroevolución para fw³ (w + fw¹ + fw² + fw³).
+Main neuroevolution loop for fw3: w + fw1 + fw2 + fw3.
 
-Incluye soporte para multiprocessing (--workers N) del script original,
-manteniendo la compatibilidad con el modo dashboard SSE (single process).
+Multiprocessing is available for CLI runs. Dashboard mode stays single-process
+so training progress can be emitted in-order through the SSE telemetry channel.
 """
 from __future__ import annotations
 
@@ -31,10 +29,6 @@ from src.infrastructure.data.incremental_splitter import split_incremental
 from src.infrastructure.events.stdout_event_publisher import EventPublisher
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Worker para multiprocessing (debe ser importable en nivel de módulo)
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _eval_worker(args):
     idx, g_arr, sessions_xy, val_xy, use_dual, max_epochs, seed = args
     rng      = np.random.default_rng(seed)
@@ -46,10 +40,6 @@ def _eval_worker(args):
         net.train_session(Xs, ys, max_epochs=max_epochs)
     return idx, net.accuracy(val[0], val[1])
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _elapsed_str(seconds: float) -> str:
     td   = timedelta(seconds=int(seconds))
@@ -64,10 +54,6 @@ def _elapsed_str(seconds: float) -> str:
     parts.append(f"{s}s")
     return " ".join(parts)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Historial de evolución
-# ─────────────────────────────────────────────────────────────────────────────
 
 class EvoHistory:
     def __init__(self):
@@ -119,10 +105,6 @@ class EvoHistory:
             test_acc_val * 100.0 if test_acc_val is not None else float("nan")
         )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Bucle principal
-# ─────────────────────────────────────────────────────────────────────────────
 
 def run_evolution(
     X_train: np.ndarray,
@@ -195,9 +177,6 @@ def run_evolution(
     log_fn(f"Paralelismo: {n_workers} workers / {n_cpu} CPUs disponibles")
     log_fn("=" * 60)
 
-    # ════════════════════════════════════════════════════════════════════
-    #  BUCLE GENERACIONAL
-    # ════════════════════════════════════════════════════════════════════
     for gen in range(n_generations):
         t0      = time.time()
         gen_rng = np.random.default_rng(master_rng.integers(0, 2**31))
@@ -208,7 +187,7 @@ def run_evolution(
         use_mp = (n_workers > 1 and publisher is None)
 
         if use_mp:
-            # ── Modo multiprocessing ──────────────────────────────────────────
+            # Worker processes cannot emit ordered dashboard telemetry safely.
             sessions_xy = [(Xs.tolist(), ys.tolist()) for Xs, ys in sessions]
             val_xy      = (val[0].tolist(), val[1].tolist())
             worker_args = [
@@ -221,7 +200,6 @@ def run_evolution(
             for idx, fit in results:
                 fitness[idx] = fit
         else:
-            # ── Modo single-process (dashboard o n_workers=1) ─────────────────
             for i, g in enumerate(population):
                 eval_rng  = np.random.default_rng(master_rng.integers(0, 2**31))
                 use_emit  = (i < verbose_individuals)
@@ -234,7 +212,6 @@ def run_evolution(
                 emit("individual_done", gen=gen, individual=i,
                      fitness=round(float(fitness[i]), 4))
 
-        # ── Selección ──────────────────────────────────────────────────────────
         cur_size = len(population)
         ranked   = np.argsort(fitness[:cur_size])[::-1]
         best_idx = ranked[0]
@@ -242,7 +219,7 @@ def run_evolution(
         top_n    = max(1, cur_size // 10)
         top_fit  = float(fitness[ranked[:top_n]].mean())
 
-        # Test rápido del mejor
+        # Track a quick test-set estimate for plots without changing selection.
         tst_rng = np.random.default_rng(master_rng.integers(0, 2**31))
         tst_ses, _ = split_incremental(
             X_train, y_train,
@@ -283,7 +260,6 @@ def run_evolution(
              best_genotype=best_g.to_dict(),
              fitness_all=[round(float(f), 4) for f in fitness[ranked]])
 
-        # ── Reproducción ───────────────────────────────────────────────────────
         parent_rng = np.random.default_rng(master_rng.integers(0, 2**31))
         n_children = pop_size - len(survivors)
         children = [
@@ -296,9 +272,6 @@ def run_evolution(
         population = survivors + children
         fitness    = np.zeros(pop_size)
 
-    # ════════════════════════════════════════════════════════════════════
-    #  EVALUACIÓN FINAL
-    # ════════════════════════════════════════════════════════════════════
     log_fn("\n[Evaluación final sobre test set...]")
     emit("final_start")
 
@@ -334,7 +307,6 @@ def run_evolution(
     mean_acc = float(np.mean(test_accs)) * 100
     std_acc  = float(np.std(test_accs))  * 100
 
-    # Matriz de confusión
     cm_net = MLP(
         top_indivs[0], use_dual=use_dual,
         rng=np.random.default_rng(master_rng.integers(0, 2**31)),
@@ -368,7 +340,6 @@ def run_evolution(
          best_genotype=top_indivs[0].to_dict(),
          target_acc=95.07, n_fw_lines=3)
 
-    # ── Matriz triangular ─────────────────────────────────────────────────────
     log_fn(f"\n[Generando matriz triangular ({tri_runs} runs)...]")
     tri_matrix, tri_s_accs, tri_mean, tri_std = evaluate_triangular(
         top_indivs, X_train, y_train, X_test, y_test,
@@ -404,7 +375,6 @@ def run_evolution(
 
     save_confusion_csv(cm, os.path.join(dir_data, f"{out_prefix}_confusion.csv"))
 
-    # ── Gráficas ──────────────────────────────────────────────────────────────
     log_fn("\n[Generando gráficas...]")
     try:
         from src.shared.utils.plots import (
