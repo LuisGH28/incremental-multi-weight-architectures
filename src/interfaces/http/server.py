@@ -3,7 +3,7 @@
 """
 interfaces/http/server.py
 ==========================
-Servidor HTTP/SSE para el dashboard fw².
+Servidor HTTP/SSE para el dashboard fw³.
 
 Lanza src/interfaces/cli/neuro.py como subproceso y reenvía
 su stdout (eventos JSON) al navegador vía Server-Sent Events.
@@ -18,6 +18,7 @@ Luego abrir:  http://localhost:8765/dashboard.html
 import argparse
 import http.server
 import json
+import mimetypes
 import os
 import subprocess
 import sys
@@ -26,6 +27,8 @@ import time
 from pathlib import Path
 
 from src.infrastructure.events.stdout_event_publisher import NeuroLogger
+
+DASHBOARD_DIR = Path(__file__).resolve().parents[3] / "dashboard"
 
 # ── Estado global compartido ──────────────────────────────────────────────────
 _events: list      = []
@@ -46,6 +49,15 @@ def _broadcast(line: str) -> None:
                 pass
 
 
+def _drain_stderr(proc: subprocess.Popen, logger: NeuroLogger) -> None:
+    if proc.stderr is None:
+        return
+    for line in proc.stderr:
+        line = line.rstrip()
+        if line:
+            logger.warn(line)
+
+
 def _run_script(cmd: list, logger: NeuroLogger) -> None:
     proc = subprocess.Popen(
         cmd,
@@ -53,6 +65,12 @@ def _run_script(cmd: list, logger: NeuroLogger) -> None:
         stderr=subprocess.PIPE,
         text=True,
     )
+    stderr_thread = threading.Thread(
+        target=_drain_stderr,
+        args=(proc, logger),
+        daemon=True,
+    )
+    stderr_thread.start()
     for line in proc.stdout:
         line = line.rstrip()
         if line:
@@ -76,21 +94,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
 
-        # ── Sirve dashboard.html ──────────────────────────────────────────────
-        if path in ("/", "/dashboard.html"):
-            html_path = Path(__file__).parent / "dashboard.html"
-            if not html_path.exists():
-                self.send_error(404, "dashboard.html not found")
+        # ── Sirve dashboard estático ──────────────────────────────────────────
+        if path in ("/", "/dashboard.html", "/index.html"):
+            return self._serve_static(DASHBOARD_DIR / "index.html", "text/html; charset=utf-8")
+
+        if path.startswith("/assets/"):
+            requested = (DASHBOARD_DIR / path.lstrip("/")).resolve()
+            if DASHBOARD_DIR.resolve() not in requested.parents:
+                self.send_error(403)
                 return
-            data = html_path.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
-            self.send_header("Pragma", "no-cache")
-            self.end_headers()
-            self.wfile.write(data)
-            return
+            return self._serve_static(requested)
 
         # ── SSE /events ───────────────────────────────────────────────────────
         if path == "/events":
@@ -156,12 +169,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         self.send_error(404)
 
+    def _serve_static(self, file_path: Path, content_type=None):
+        if not file_path.exists() or not file_path.is_file():
+            self.send_error(404, f"{file_path.name} not found")
+            return
+        data = file_path.read_bytes()
+        guessed_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", content_type or guessed_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.end_headers()
+        self.wfile.write(data)
+
 
 # ── Punto de entrada ──────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Dashboard SSE para neuroevolución fw²"
+        description="Dashboard SSE para neuroevolución fw³"
     )
     # ── Dataset ───────────────────────────────────────────────────────────────
     ap.add_argument("--dataset",    default="optdigits",
