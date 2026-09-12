@@ -1,6 +1,6 @@
-import { connectSSE } from './services/sse.js';
+import { startDashboard } from './app.js';
 import { setupNavigation, setupLucideIcons } from './ui/navigation.js';
 
-connectSSE();
 setupNavigation();
 setupLucideIcons();
+startDashboard();

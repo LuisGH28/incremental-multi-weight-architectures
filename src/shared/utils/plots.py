@@ -1,10 +1,10 @@
 """
 shared/utils/plots.py
 ======================
-Gráficas para el experimento fw²:
-  - Réplica de Figure 1 de Bullinaria (2009), extendida con δ₂ y σ₂
-  - Heatmap de la matriz triangular
-  - Matriz de confusión
+Plotting utilities for the fw2 experiment:
+  - Bullinaria Figure 1 style evolution panel, extended with fw2 parameters
+  - triangular matrix heatmap
+  - confusion matrix
 """
 from __future__ import annotations
 
@@ -16,10 +16,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Figure 1 — réplica extendida de Bullinaria (2009)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def plot_evolution(history, label: str, out_path: str, log_fn=None) -> None:
     G = history.gens
@@ -45,7 +41,6 @@ def plot_evolution(history, label: str, out_path: str, log_fn=None) -> None:
         ax.grid(True, alpha=0.25, linewidth=0.5)
         return ax
 
-    # ── Fila 0: Connectivity + Learning rates ────────────────────────────────
     ax = _ax(0, 0, "Connectivity", "Con.")
     ax.plot(G, history.con_ih, color=C["cih"], lw=1.4, label="conIH")
     ax.plot(G, history.con_ho, color=C["cho"], lw=1.4, label="conHO")
@@ -59,7 +54,6 @@ def plot_evolution(history, label: str, out_path: str, log_fn=None) -> None:
     ax.plot(G, history.log_eta_ob, color=C["eta_ob"], lw=1.4, label="ηOB")
     ax.legend(fontsize=7, framealpha=0.7)
 
-    # ── Fila 1: Regularización + Fast-weight params (fw¹ y fw²) ─────────────
     ax = _ax(1, 0, "Regularization params", "log-param")
     ax.plot(G, history.log_lam,  color=C["lam"],  lw=1.4, label="λ (weight decay)")
     ax.plot(G, history.log_ospo, color=C["ospo"], lw=1.4, label="oSPO")
@@ -72,7 +66,6 @@ def plot_evolution(history, label: str, out_path: str, log_fn=None) -> None:
     ax.plot(G, history.log_fw2_scale, color=C["fw2s"], lw=1.4, ls="--", label="σ₂ (fw² scale)")
     ax.legend(fontsize=7, framealpha=0.7)
 
-    # ── Fila 2: Tolerancias + Rendimiento ────────────────────────────────────
     ax = _ax(2, 0, "Tolerances", "Tol.")
     ax.plot(G, history.tol_s, color=C["tol_s"], lw=1.4, label="s (stopping)")
     ax.plot(G, history.tol_t, color=C["tol_t"], lw=1.4, label="t (output tol.)")
@@ -99,10 +92,6 @@ def plot_evolution(history, label: str, out_path: str, log_fn=None) -> None:
     if log_fn:
         log_fn(f"  Gráfica evolución: {out_path}")
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Heatmap matriz triangular
-# ─────────────────────────────────────────────────────────────────────────────
 
 def plot_triangular_heatmap(
     matrix: list,
@@ -153,10 +142,6 @@ def plot_triangular_heatmap(
     if log_fn:
         log_fn(f"  Heatmap triangular: {out_path}")
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Matriz de confusión
-# ─────────────────────────────────────────────────────────────────────────────
 
 def plot_confusion(
     cm: np.ndarray,

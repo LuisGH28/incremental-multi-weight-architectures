@@ -1,18 +1,16 @@
 """
 domain/services/evolution_service.py
 ======================================
-Bucle principal de neuroevolución para la arquitectura fw²
-(w + fw¹ + fw²).
+Main neuroevolution loop for the fw2 architecture (w + fw1 + fw2).
 
-Replica el esquema de Bullinaria (2009):
-  - Población de 100 redes
-  - Cruce con rango + mutación gaussiana
-  - Los 50% mejores sobreviven y generan un hijo cada uno
-  - Distintos splits de entrenamiento/validación en cada generación
+This follows Bullinaria's evolutionary protocol:
+  - population-based evaluation
+  - range crossover plus Gaussian mutation
+  - the best half survives and each survivor produces one child
+  - each generation uses a fresh training/validation split
 
-Extensión propuesta:
-  - El genotipo incluye (δ₂, σ₂) para una segunda línea de fast-weights
-  - Todos los demás parámetros y el protocolo son idénticos a fw¹
+The proposed extension adds fw2_decay/fw2_scale for a second fast-weight line
+while preserving the rest of the protocol.
 """
 from __future__ import annotations
 
@@ -38,10 +36,6 @@ from src.infrastructure.data.incremental_splitter import split_incremental
 from src.infrastructure.events.stdout_event_publisher import EventPublisher
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _elapsed_str(seconds: float) -> str:
     td   = timedelta(seconds=int(seconds))
     days = td.days
@@ -55,10 +49,6 @@ def _elapsed_str(seconds: float) -> str:
     parts.append(f"{s}s")
     return " ".join(parts)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Historial de evolución (para gráficas y CSV de progreso)
-# ─────────────────────────────────────────────────────────────────────────────
 
 class EvoHistory:
     def __init__(self):
@@ -113,16 +103,11 @@ class EvoHistory:
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Bucle principal
-# ─────────────────────────────────────────────────────────────────────────────
-
 def run_evolution(
     X_train: np.ndarray,
     y_train: np.ndarray,
     X_test:  np.ndarray,
     y_test:  np.ndarray,
-    # ── Hiperparámetros evolutivos ─────────────────────────────────────────
     pop_size:            int   = 100,
     n_generations:       int   = 50,
     use_dual:            bool  = True,
@@ -133,22 +118,20 @@ def run_evolution(
     verbose_individuals: int   = 3,
     n_in:                int   = 64,
     n_out:               int   = 10,
-    # ── Salida ────────────────────────────────────────────────────────────
     out_prefix:  str = "fw2",
     tri_runs:    int = 5,
     dir_data:    str = "result",
     dir_plots:   str = "plots",
-    # ── Publisher de eventos (dashboard) ──────────────────────────────────
     publisher: Optional[EventPublisher] = None,
     log_fn=None,
     log_detail_fn=None,
 ):
     """
-    Ejecuta la neuroevolución para fw².
+    Run fw2 neuroevolution.
 
-    publisher  — instancia de EventPublisher o None (sin dashboard)
-    log_fn     — callable(str) para mensajes de terminal/log
-    log_detail_fn — callable(str) para mensajes sólo al archivo .log
+    publisher controls optional dashboard telemetry. log_detail_fn is intended
+    for verbose details that belong in the run log rather than normal terminal
+    output.
     """
     run_start = time.time()
 
@@ -170,7 +153,6 @@ def run_evolution(
     os.makedirs(dir_data,  exist_ok=True)
     os.makedirs(dir_plots, exist_ok=True)
 
-    # ── CSV de progreso por generación ────────────────────────────────────────
     csv_progress_path = os.path.join(dir_data, f"{out_prefix}_progress.csv")
     csv_file = open(csv_progress_path, "w", newline="")
     cw = csv.writer(csv_file)
@@ -184,7 +166,9 @@ def run_evolution(
     emit("config",
          pop_size=pop_size, n_generations=n_generations,
          use_dual=use_dual, max_epochs=max_epochs,
-         n_train=len(X_train), n_test=len(X_test))
+         n_train=len(X_train), n_test=len(X_test),
+         dataset="optdigits", n_inputs=n_in, n_outputs=n_out,
+         n_fast_weight_lines=2, weight_labels=["w", "fw1", "fw2"])
 
     population = [Genotype.random(master_rng) for _ in range(pop_size)]
     fitness    = np.zeros(pop_size)
@@ -194,9 +178,6 @@ def run_evolution(
     log_fn(f"Budget: {n_generations} gen | pop={pop_size} | max_epochs={max_epochs}")
     log_fn("=" * 60)
 
-    # ════════════════════════════════════════════════════════════════════
-    #  BUCLE GENERACIONAL
-    # ════════════════════════════════════════════════════════════════════
     for gen in range(n_generations):
         t0      = time.time()
         gen_rng = np.random.default_rng(master_rng.integers(0, 2**31))
@@ -218,14 +199,13 @@ def run_evolution(
                  gen=gen, individual=i,
                  fitness=round(float(fitness[i]), 4))
 
-        # ── Selección ──────────────────────────────────────────────────────
         ranked   = np.argsort(fitness)[::-1]
         best_idx = ranked[0]
         best_g   = population[best_idx]
         top_n    = max(1, pop_size // 10)
         top_fit  = float(fitness[ranked[:top_n]].mean())
 
-        # Test rápido del mejor para el dashboard / CSV
+        # Quick test-series accuracy is recorded for progress CSV and dashboard charts.
         tst_rng = np.random.default_rng(master_rng.integers(0, 2**31))
         tst_ses, _ = split_incremental(
             X_train, y_train,
@@ -274,7 +254,6 @@ def run_evolution(
              best_genotype=best_g.to_dict(),
              fitness_all=[round(float(f), 4) for f in fitness[ranked]])
 
-        # ── Reproducción ───────────────────────────────────────────────────
         parent_rng = np.random.default_rng(master_rng.integers(0, 2**31))
         children = [
             p.crossover_mutate(
@@ -285,9 +264,6 @@ def run_evolution(
         ]
         population = survivors + children
 
-    # ════════════════════════════════════════════════════════════════════
-    #  EVALUACIÓN FINAL
-    # ════════════════════════════════════════════════════════════════════
     log_fn("\n[Evaluación final sobre test set...]")
     emit("final_start")
 
@@ -323,7 +299,6 @@ def run_evolution(
     mean_acc = float(np.mean(test_accs)) * 100
     std_acc  = float(np.std(test_accs))  * 100
 
-    # Matriz de confusión del mejor individuo
     cm_net   = MLP(
         top_indivs[0], use_dual=use_dual,
         rng=np.random.default_rng(master_rng.integers(0, 2**31)),
@@ -355,9 +330,10 @@ def run_evolution(
     emit("final_result",
          mean_acc=round(mean_acc, 2), std_acc=round(std_acc, 2),
          session_accs=session_accs[0] if session_accs else [],
-         best_genotype=top_indivs[0].to_dict(), target_acc=95.07)
+         best_genotype=top_indivs[0].to_dict(), target_acc=95.07,
+         dataset="optdigits", n_inputs=n_in, n_outputs=n_out,
+         n_fast_weight_lines=2, weight_labels=["w", "fw1", "fw2"])
 
-    # ── Matriz triangular ─────────────────────────────────────────────────────
     log_fn(f"\n[Generando matriz triangular ({tri_runs} runs)...]")
     tri_matrix, tri_s_accs, tri_mean, tri_std = evaluate_triangular(
         top_indivs, X_train, y_train, X_test, y_test,
@@ -392,11 +368,10 @@ def run_evolution(
     with open(tri_txt, "w") as f:
         f.writelines(txt_lines)
 
-    # ── Matriz de confusión ───────────────────────────────────────────────────
     cm_csv = os.path.join(dir_data, f"{out_prefix}_confusion.csv")
     save_confusion_csv(cm, cm_csv)
 
-    # ── Gráficas (importación diferida — matplotlib opcional) ─────────────────
+    # Import plotting lazily so CLI runs still work when matplotlib is unavailable.
     log_fn("\n[Generando gráficas...]")
     try:
         from src.shared.utils.plots import (

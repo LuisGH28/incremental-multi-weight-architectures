@@ -1,11 +1,11 @@
 """
 domain/model/genotype.py
 ========================
-Genotipo para la arquitectura fw² (w + fw¹ + fw²).
+Genotype for the fw2 architecture (w + fw1 + fw2).
 
-Extiende el esquema de Bullinaria (2009) —que evoluciona un único par
-(fw_decay δ₁, fw_scale σ₁)— añadiendo un segundo par independiente
-(fw2_decay δ₂, fw2_scale σ₂) para la segunda línea de fast-weights.
+This extends Bullinaria's original fast-weight scheme, which evolves one
+decay/scale pair, with an independent fw2_decay/fw2_scale pair for the second
+fast-weight line.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -14,31 +14,29 @@ import numpy as np
 
 @dataclass
 class Genotype:
-    # ── Topología ─────────────────────────────────────────────────────────────
+    # Topology
     n_hid:  float
     c_ih:   float;  c_ho:   float
 
-    # ── Tasas de aprendizaje (4 componentes) ──────────────────────────────────
+    # Learning rates for the four trainable components.
     eta_ih: float;  eta_hb: float
     eta_ho: float;  eta_ob: float
 
-    # ── Distribuciones iniciales de pesos ─────────────────────────────────────
+    # Initial weight distributions.
     l_ih:   float;  u_ih:   float
     l_hb:   float;  u_hb:   float
     l_ho:   float;  u_ho:   float
     l_ob:   float;  u_ob:   float
 
-    # ── Regularización ────────────────────────────────────────────────────────
+    # Regularization and stopping tolerances.
     ospo:   float;  lam:    float
     tol_t:  float;  tol_s:  float
 
-    # ── fw¹ — Bullinaria (2009) ───────────────────────────────────────────────
+    # fw1 follows Bullinaria's original fast-weight line.
     fw_decay:  float;  fw_scale:  float
 
-    # ── fw² — extensión propuesta ─────────────────────────────────────────────
+    # fw2 is the proposed second fast-weight line.
     fw2_decay: float;  fw2_scale: float
-
-    # ──────────────────────────────────────────────────────────────────────────
 
     @staticmethod
     def random(rng) -> "Genotype":
@@ -88,11 +86,9 @@ class Genotype:
             + rng.normal(0, std, len(a))
         )
         child = np.clip(child, 0, None)
-        child[20] = max(child[20], 2.0)   # fw_scale  ≥ 2
-        child[22] = max(child[22], 1.0)   # fw2_scale ≥ 1
+        child[20] = max(child[20], 2.0)
+        child[22] = max(child[22], 1.0)
         return Genotype.from_array(child)
-
-    # ── Serialización ─────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
         return {

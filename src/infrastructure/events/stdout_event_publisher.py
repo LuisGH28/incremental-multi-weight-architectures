@@ -1,11 +1,8 @@
 """
-infrastructure/events/stdout_event_publisher.py
-================================================
-Publica eventos JSON en stdout para que el servidor SSE los reenvíe al
-dashboard, y opcionalmente escribe un archivo .log con el historial completo.
+Publish experiment telemetry and logs for CLI/server modes.
 
-El formato es idéntico al del proyecto base para que dashboard.html
-no necesite cambios en su listener SSE.
+Structured JSON events are written to stdout for the SSE server. Human-readable
+logs are written to stderr and to the run log file.
 """
 from __future__ import annotations
 
@@ -16,19 +13,12 @@ import time
 from typing import Optional
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Publisher de eventos (stdout → SSE → dashboard)
-# ─────────────────────────────────────────────────────────────────────────────
-
 class EventPublisher:
     """
-    Emite eventos JSON de una sola línea en stdout.
+    Emit one JSON event per stdout line when dashboard mode is enabled.
 
-    Cuando dashboard_mode=True cada llamada a emit() imprime:
+    When dashboard_mode=True, each emit() call prints:
         {"type": "...", "ts": 1234567890.123, ...}
-
-    El servidor SSE (interfaces/http/server.py) lee stdout línea a línea
-    y las reenvía a los clientes conectados.
     """
 
     def __init__(self, dashboard_mode: bool = False):
@@ -41,19 +31,15 @@ class EventPublisher:
         print(json.dumps(payload), flush=True)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Logger centralizado (terminal + archivo)
-# ─────────────────────────────────────────────────────────────────────────────
-
 class NeuroLogger:
     """
-    Wrapper ligero alrededor de logging.Logger.
+    Lightweight wrapper around logging.Logger.
 
-    - Mensajes INFO y superiores → terminal (stderr)
-    - Todos los mensajes (DEBUG incluido) → archivo .log
+    - INFO and above are sent to stderr.
+    - DEBUG and above are written to the run log file.
 
-    También expone handle(line) para que server.py pueda pasarle
-    las líneas de stdout del subproceso de neuroevolución.
+    handle(line) records subprocess stdout without forwarding human-readable
+    text to the SSE channel.
     """
 
     def __init__(self, log_path: str):
@@ -64,19 +50,15 @@ class NeuroLogger:
         self._logger = logging.getLogger(f"neuroevo.{log_path}")
         self._logger.setLevel(logging.DEBUG)
 
-        # Handler archivo
         fh = logging.FileHandler(log_path, encoding="utf-8")
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(fmt)
         self._logger.addHandler(fh)
 
-        # Handler terminal
         ch = logging.StreamHandler(sys.stderr)
         ch.setLevel(logging.INFO)
         ch.setFormatter(fmt)
         self._logger.addHandler(ch)
-
-    # ── Métodos de log ────────────────────────────────────────────────────────
 
     def info(self, msg: str)  -> None: self._logger.info(msg)
     def debug(self, msg: str) -> None: self._logger.debug(msg)
@@ -85,11 +67,13 @@ class NeuroLogger:
 
     def handle(self, line: str) -> None:
         """
-        Recibe una línea de stdout del subproceso de neuroevolución.
-        Si es JSON válido, la registra como DEBUG; si no, como INFO.
+        Record a stdout line from the neuroevolution subprocess.
+
+        JSON telemetry is kept at DEBUG level in the log file; human-readable
+        stdout is recorded as INFO.
         """
         try:
-            json.loads(line)          # valida que sea JSON
+            json.loads(line)
             self._logger.debug(line)
         except (json.JSONDecodeError, ValueError):
             self._logger.info(line)
@@ -100,12 +84,5 @@ class NeuroLogger:
             self._logger.removeHandler(h)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers de conveniencia para uso en CLI
-# ─────────────────────────────────────────────────────────────────────────────
-
 def make_log_fns(logger: NeuroLogger):
-    """
-    Devuelve (log_fn, log_detail_fn) listas para pasar a run_evolution().
-    """
     return logger.info, logger.debug

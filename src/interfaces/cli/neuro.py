@@ -3,18 +3,18 @@
 """
 interfaces/cli/neuro.py
 ========================
-CLI compacta para el experimento fw² (w + fw¹ + fw²).
+Compact CLI for the fw2 experiment (w + fw1 + fw2).
 
-Uso rápido (50 gen, pop=50):
+Quick run:
     python run.py cli
 
-Réplica completa (1800 gen, pop=100):
+Full replication:
     python run.py cli --full
 
-Con parámetros explícitos:
+Explicit parameters:
     python run.py cli --generations 100 --pop-size 50 --max-epochs 500
 
-Solo pesos base (sin fast-weights):
+Base weights only:
     python run.py cli --no-dual
 """
 from __future__ import annotations
@@ -40,7 +40,6 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # ── Dataset ───────────────────────────────────────────────────────────────
     ap.add_argument("--dataset",  default="optdigits",
                     choices=["optdigits"],
                     help="Dataset a usar")
@@ -51,7 +50,6 @@ def main():
     ap.add_argument("--test",     default=None,
                     help="Ruta explícita a optdigits.tes")
 
-    # ── Evolución ─────────────────────────────────────────────────────────────
     ap.add_argument("--generations",   type=int,   default=50)
     ap.add_argument("--full",          action="store_true",
                     help="Budget completo: 1800 gen / pop=100 / epochs=5000")
@@ -65,7 +63,6 @@ def main():
     ap.add_argument("--verbose-indiv", type=int,   default=3,
                     help="Cuántos individuos por gen reciben log detallado")
 
-    # ── Salida ────────────────────────────────────────────────────────────────
     ap.add_argument("--out-prefix",  default="fw2",
                     help="Prefijo para archivos de salida")
     ap.add_argument("--tri-runs",    type=int, default=5,
@@ -75,13 +72,11 @@ def main():
     ap.add_argument("--dir-plots",   default="plots",
                     help="Carpeta para imágenes PNG")
 
-    # ── Dashboard ─────────────────────────────────────────────────────────────
     ap.add_argument("--dashboard",   action="store_true",
                     help="Activa emisión de eventos JSON para el dashboard SSE")
 
     args = ap.parse_args()
 
-    # ── Budget ────────────────────────────────────────────────────────────────
     if args.full:
         generations = 1800
         pop_size    = 100
@@ -91,17 +86,14 @@ def main():
         pop_size    = args.pop_size
         max_epochs  = args.max_epochs
 
-    # ── Carpetas y logger ─────────────────────────────────────────────────────
     os.makedirs(args.dir_data,  exist_ok=True)
     os.makedirs(args.dir_plots, exist_ok=True)
     log_path = os.path.join(args.dir_data, f"{args.out_prefix}_run.log")
     logger   = NeuroLogger(log_path)
     log_fn, log_detail_fn = make_log_fns(logger)
 
-    # ── Publisher ─────────────────────────────────────────────────────────────
     publisher = EventPublisher(dashboard_mode=args.dashboard)
 
-    # ── Datos ─────────────────────────────────────────────────────────────────
     X_train, y_train, X_test, y_test = load_dataset(
         args.dataset,
         data_dir=args.data_dir,
@@ -119,7 +111,6 @@ def main():
     log_fn(f"Salida → datos: {args.dir_data}/   gráficas: {args.dir_plots}/")
     log_fn(f"Log completo:   {log_path}")
 
-    # ── Evolución ─────────────────────────────────────────────────────────────
     run_evolution(
         X_train, y_train, X_test, y_test,
         pop_size            = pop_size,

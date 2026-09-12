@@ -1,8 +1,7 @@
 """
 domain/services/evaluation_service.py
 ======================================
-Lógica de evaluación de individuos y generación de la
-matriz triangular al estilo Bullinaria (2009) Tablas 3 y 4.
+Individual evaluation and Bullinaria-style triangular matrix generation.
 """
 from __future__ import annotations
 
@@ -16,10 +15,6 @@ from src.domain.model.mlp import MLP
 from src.infrastructure.data.incremental_splitter import split_incremental
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Evaluación de un individuo en una generación
-# ─────────────────────────────────────────────────────────────────────────────
-
 def evaluate_individual(
     g: Genotype,
     sessions: list,
@@ -32,11 +27,11 @@ def evaluate_individual(
     gen: Optional[int] = None,
 ) -> float:
     """
-    Entrena un individuo en las 6 sesiones incrementales y devuelve
-    su fitness (accuracy en el conjunto de validación).
+    Train one genotype across the six incremental sessions and return
+    validation accuracy as fitness.
 
-    emit_fn se pasa al MLP sólo para los primeros verbose_individuals
-    (el caller decide si pasar None o el publisher real).
+    The caller decides whether emit_fn is None or the real event publisher,
+    which keeps detailed dashboard events limited to verbose individuals.
     """
     net = MLP(g, use_dual=use_dual, rng=rng)
     for s_idx, (Xs, ys) in enumerate(sessions):
@@ -51,10 +46,6 @@ def evaluate_individual(
     return net.accuracy(val[0], val[1])
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Matriz triangular (Tablas 3 / 4 de Bullinaria 2009)
-# ─────────────────────────────────────────────────────────────────────────────
-
 def evaluate_triangular(
     top_individuals: List[Genotype],
     X_train: np.ndarray,
@@ -68,11 +59,8 @@ def evaluate_triangular(
     log_fn=None,
 ) -> Tuple[list, list, float, float]:
     """
-    Evalúa la arquitectura usando el mejor individuo con n_runs ejecuciones
-    independientes, promediando resultados al estilo de Bullinaria (2009).
-
-    Devuelve:
-      (avg_matrix, avg_session_accs, mean_acc, std_acc)
+    Evaluate the best genotype over independent runs and average results in
+    the style of Bullinaria's Tables 3 and 4.
     """
     n_sessions = 6
     g          = top_individuals[0]
@@ -101,7 +89,6 @@ def evaluate_triangular(
         if log_fn:
             log_fn(f"  [Triangular run {run+1}/{n_runs}] T6_test={s_accs[-1]:.2f}%")
 
-    # Promedio elemento a elemento
     avg = [[None] * n_sessions for _ in range(n_sessions)]
     for s in range(n_sessions):
         for b in range(n_sessions):
@@ -122,10 +109,6 @@ def evaluate_triangular(
 
     return avg, avg_s_accs, mean_acc, std_acc
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Impresión y exportación de la matriz triangular
-# ─────────────────────────────────────────────────────────────────────────────
 
 def print_triangular_matrix(
     matrix: list,
@@ -197,10 +180,6 @@ def save_triangular_csv(
         w.writerow(["mean_acc", mean_acc])
         w.writerow(["std_acc",  std_acc])
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Matriz de confusión
-# ─────────────────────────────────────────────────────────────────────────────
 
 def compute_confusion(
     net: MLP,
