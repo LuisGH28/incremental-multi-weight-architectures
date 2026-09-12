@@ -12,7 +12,7 @@ import numpy as np
 
 from src.domain.model.genotype import Genotype
 from src.domain.model.mlp import MLP
-from src.infrastructure.data.incremental_splitter import split_incremental
+from src.infrastructure.data.incremental_splitter import DEFAULT_N_SESSIONS, split_incremental
 
 
 def evaluate_individual(
@@ -62,7 +62,7 @@ def evaluate_triangular(
     Evaluate the best genotype over independent runs and average results in
     the style of Bullinaria's Tables 3 and 4.
     """
-    n_sessions = 6
+    n_sessions = DEFAULT_N_SESSIONS
     g          = top_individuals[0]
     all_matrices, all_s_accs, all_t_accs = [], [], []
 

@@ -398,24 +398,6 @@
 	  .arch-link {
 	    stroke-linecap: round;
 	  }
-	  .arch-link-w {
-	    stroke: rgba(99, 102, 241, 0.35);
-	    stroke-width: 1.2;
-	  }
-	  .arch-link-output {
-	    stroke: rgba(34, 197, 94, 0.35);
-	    stroke-width: 1.2;
-	  }
-	  .arch-link-fw1 {
-	    stroke: rgba(245, 158, 11, 0.25);
-	    stroke-width: 1.5;
-	    stroke-dasharray: 3 3;
-	  }
-	  .arch-link-fw2 {
-	    stroke: rgba(224, 90, 58, 0.22);
-	    stroke-width: 1.5;
-	    stroke-dasharray: 5 3 1 3;
-	  }
 	  .arch-node {
 	    stroke: #fff;
 	    stroke-width: 2;
@@ -442,8 +424,6 @@
 	    fill: #64748b;
 	    font-size: 8px;
 	  }
-	  .arch-fw1-text { fill: #f59e0b; }
-	  .arch-fw2-text { fill: #e05a3a; }
 	  .flow-svg {
 	    min-width: 600px;
 	  }

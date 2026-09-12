@@ -2,6 +2,13 @@ function svgText(x, y, text, attrs = '') {
   return `<text x="${x}" y="${y}" ${attrs}>${text}</text>`;
 }
 
+function weightSummary(arch) {
+  const labels = Array.isArray(arch.weightLabels) && arch.weightLabels.length
+    ? arch.weightLabels
+    : arch.weight_labels;
+  return Array.isArray(labels) && labels.length ? labels.join(' + ') : 'weights';
+}
+
 export function renderFlow(elements, ev) {
   const classes = ev.class_counts || {};
   const arch = ev.arch || {};
@@ -9,13 +16,14 @@ export function renderFlow(elements, ev) {
   const H = 130;
   const n = ev.n_patterns || 200;
   const nHid = arch.n_hid || '?';
-  const nInputs = arch.n_inputs || ev.n_inputs || 64;
-  const nOutputs = arch.n_outputs || arch.n_out || ev.n_outputs || ev.n_out || 10;
-  const fastWeightLines = arch.n_fast_weight_lines || arch.n_fw || ev.n_fast_weight_lines || 2;
+  const nInputs = arch.nInputs || arch.n_inputs || ev.nInputs || ev.n_inputs || '?';
+  const nOutputs = arch.nOutputs || arch.n_outputs || arch.n_out || ev.nOutputs || ev.n_outputs || ev.n_out || '?';
+  const nSessions = ev.nSessions || arch.nSessions || '?';
+  const fastWeightLines = arch.nFastWeightLines ?? arch.n_fast_weight_lines ?? arch.n_fw ?? ev.nFastWeightLines ?? ev.n_fast_weight_lines ?? 0;
   let html = `<svg width="100%" viewBox="0 0 ${W} ${H}" class="flow-svg">`;
 
   html += '<rect x="10" y="30" width="130" height="70" rx="8" class="flow-node flow-node-input"/>';
-  html += svgText(75, 52, `Batch ${(ev.session || 0) + 1} / 6`, 'text-anchor="middle" class="flow-title flow-title-input"');
+  html += svgText(75, 52, `Batch ${(ev.session || 0) + 1} / ${nSessions}`, 'text-anchor="middle" class="flow-title flow-title-input"');
   html += svgText(75, 68, `${n} patrones`, 'text-anchor="middle" class="flow-muted"');
 
   Object.entries(classes).slice(0, 10).forEach(([cls, cnt], i) => {
@@ -29,8 +37,8 @@ export function renderFlow(elements, ev) {
   html += '<rect x="200" y="20" width="160" height="90" rx="8" class="flow-node flow-node-model"/>';
   html += svgText(280, 45, 'MLP', 'text-anchor="middle" class="flow-title flow-title-model"');
   html += svgText(280, 62, `${nInputs} -> ${nHid} -> ${nOutputs}`, 'text-anchor="middle" class="flow-muted"');
-  if (arch.use_dual) {
-    html += svgText(280, 86, `w + fw1 + fw2 (${fastWeightLines} fast-weight lines)`, 'text-anchor="middle" class="flow-weights"');
+  if (arch.useDual !== false && arch.use_dual !== false) {
+    html += svgText(280, 86, `${weightSummary(arch)} (${fastWeightLines} fast-weight lines)`, 'text-anchor="middle" class="flow-weights"');
   }
 
   html += '<line x1="360" y1="65" x2="415" y2="65" class="flow-arrow" marker-end="url(#arr)"/>';
