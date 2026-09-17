@@ -12,10 +12,13 @@ from typing import List, Tuple, Optional
 import numpy as np
 
 
+DEFAULT_N_SESSIONS = 6
+
+
 def split_incremental(
     X: np.ndarray,
     y: np.ndarray,
-    n_sessions:  int = 6,
+    n_sessions:  int = DEFAULT_N_SESSIONS,
     ppc:         int = 20,
     num_classes: int = 10,
     rng=None,

@@ -7,23 +7,59 @@ function shouldDrawConnection(layerSeed, fromIndex, toIndex, density) {
   return hash01(layerSeed + fromIndex * 101 + toIndex * 17) <= density;
 }
 
+const WEIGHT_STYLES = [
+  { stroke: 'rgba(99, 102, 241, 0.35)', width: 1.2, dash: '' },
+  { stroke: 'rgba(245, 158, 11, 0.25)', width: 1.5, dash: '3 3' },
+  { stroke: 'rgba(224, 90, 58, 0.22)', width: 1.5, dash: '5 3 1 3' },
+  { stroke: 'rgba(20, 184, 166, 0.22)', width: 1.5, dash: '2 4' },
+  { stroke: 'rgba(168, 85, 247, 0.22)', width: 1.5, dash: '6 2' },
+];
+
+function weightStyle(idx) {
+  const style = WEIGHT_STYLES[idx % WEIGHT_STYLES.length];
+  const dash = style.dash ? ` stroke-dasharray="${style.dash}"` : '';
+  return `stroke="${style.stroke}" stroke-width="${style.width}"${dash}`;
+}
+
+function escapeText(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function weightLabelsFor(genotype) {
+  const labels = Array.isArray(genotype.weightLabels) && genotype.weightLabels.length
+    ? genotype.weightLabels
+    : genotype.weight_labels;
+  const cleaned = Array.isArray(labels) ? labels.filter(label => typeof label === 'string' && label.trim()) : ['w'];
+  return genotype.useDual === false ? cleaned.slice(0, 1) : cleaned;
+}
+
+function renderWeightedLines(x1, y1, x2, y2, labels) {
+  return labels.map((label, idx) => (
+    `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="arch-link" ${weightStyle(idx)}><title>${escapeText(label)}</title></line>`
+  )).join('');
+}
+
 export function renderArchitecture(elements, genotype) {
   if (!genotype) return;
   const nHid = genotype.n_hid;
+  const inputCount = genotype.nInputs || genotype.n_inputs || genotype.n_in || 0;
+  const outputCount = genotype.nOutputs || genotype.n_outputs || genotype.n_out || 0;
   const cIH = typeof genotype.c_ih === 'number' ? genotype.c_ih : 1;
   const cHO = typeof genotype.c_ho === 'number' ? genotype.c_ho : 1;
-  const dual = genotype.use_dual !== false;
+  const weightLabels = weightLabelsFor(genotype);
   const W = 600;
   const H = 220;
   const inputX = 80;
   const hiddenX = W / 2;
   const outputX = W - 80;
-  const inputCount = 64;
   const hiddenCount = nHid;
-  const outputCount = 10;
   const maxInputShow = 8;
   const maxHiddenShow = Math.min(nHid, 10);
-  const maxOutputShow = 10;
+  const maxOutputShow = Math.min(outputCount, 10);
 
   const getY = (idx, total, maxShow) => {
     const showCount = Math.min(total, maxShow);
@@ -38,12 +74,7 @@ export function renderArchitecture(elements, genotype) {
       if (!shouldDrawConnection(11, i, j, cIH)) continue;
       const y1 = getY(i, inputCount, maxInputShow);
       const y2 = getY(j, hiddenCount, maxHiddenShow);
-      html += `<line x1="${inputX}" y1="${y1}" x2="${hiddenX}" y2="${y2}" class="arch-link arch-link-w"/>`;
-      if (dual) {
-        html += `<line x1="${inputX}" y1="${y1}" x2="${hiddenX}" y2="${y2}" class="arch-link arch-link-fw1"/>`;
-        html += `<line x1="${inputX}" y1="${y1}" x2="${hiddenX}" y2="${y2}" class="arch-link arch-link-fw2"/>`;
-        html += `<line x1="${inputX}" y1="${y1}" x2="${hiddenX}" y2="${y2}" class="arch-link arch-link-fw3"/>`;
-      }
+      html += renderWeightedLines(inputX, y1, hiddenX, y2, weightLabels);
     }
   }
 
@@ -52,18 +83,13 @@ export function renderArchitecture(elements, genotype) {
       if (!shouldDrawConnection(29, i, j, cHO)) continue;
       const y1 = getY(i, hiddenCount, maxHiddenShow);
       const y2 = getY(j, outputCount, maxOutputShow);
-      html += `<line x1="${hiddenX}" y1="${y1}" x2="${outputX}" y2="${y2}" class="arch-link arch-link-output"/>`;
-      if (dual) {
-        html += `<line x1="${hiddenX}" y1="${y1}" x2="${outputX}" y2="${y2}" class="arch-link arch-link-fw1"/>`;
-        html += `<line x1="${hiddenX}" y1="${y1}" x2="${outputX}" y2="${y2}" class="arch-link arch-link-fw2"/>`;
-        html += `<line x1="${hiddenX}" y1="${y1}" x2="${outputX}" y2="${y2}" class="arch-link arch-link-fw3"/>`;
-      }
+      html += renderWeightedLines(hiddenX, y1, outputX, y2, weightLabels);
     }
   }
 
   for (let i = 0; i < Math.min(inputCount, maxInputShow); i += 1) {
     const y = getY(i, inputCount, maxInputShow);
-    html += `<circle cx="${inputX}" cy="${y}" r="7" class="arch-node arch-node-input"><title>Neurona entrada ${i + 1} / 64</title></circle>`;
+    html += `<circle cx="${inputX}" cy="${y}" r="7" class="arch-node arch-node-input"><title>Neurona entrada ${i + 1} / ${inputCount}</title></circle>`;
   }
 
   for (let i = 0; i < Math.min(hiddenCount, maxHiddenShow); i += 1) {
@@ -73,17 +99,21 @@ export function renderArchitecture(elements, genotype) {
 
   for (let i = 0; i < Math.min(outputCount, maxOutputShow); i += 1) {
     const y = getY(i, outputCount, maxOutputShow);
-    html += `<circle cx="${outputX}" cy="${y}" r="7" class="arch-node arch-node-output"><title>Neurona salida ${i + 1} / 10</title></circle>`;
+    html += `<circle cx="${outputX}" cy="${y}" r="7" class="arch-node arch-node-output"><title>Neurona salida ${i + 1} / ${outputCount}</title></circle>`;
   }
 
-  html += `<text x="${inputX}" y="${H - 12}" text-anchor="middle" class="arch-label">64 inputs</text>`;
+  html += `<text x="${inputX}" y="${H - 12}" text-anchor="middle" class="arch-label">${inputCount} inputs</text>`;
   html += `<text x="${hiddenX}" y="${H - 12}" text-anchor="middle" class="arch-label">${nHid} ocultas</text>`;
-  html += `<text x="${outputX}" y="${H - 12}" text-anchor="middle" class="arch-label">10 salidas</text>`;
-  html += '<rect x="12" y="6" width="218" height="28" rx="6" class="arch-legend-box"/>';
-  html += '<line x1="20" y1="18" x2="34" y2="18" class="arch-legend arch-link-w"/><text x="38" y="22" class="arch-legend-text">w</text>';
-  html += '<line x1="58" y1="18" x2="72" y2="18" class="arch-legend arch-link-fw1"/><text x="76" y="22" class="arch-legend-text arch-fw1-text">fw1</text>';
-  html += '<line x1="106" y1="18" x2="120" y2="18" class="arch-legend arch-link-fw2"/><text x="124" y="22" class="arch-legend-text arch-fw2-text">fw2</text>';
-  html += '<line x1="154" y1="18" x2="168" y2="18" class="arch-legend arch-link-fw3"/><text x="172" y="22" class="arch-legend-text arch-fw3-text">fw3</text>';
+  html += `<text x="${outputX}" y="${H - 12}" text-anchor="middle" class="arch-label">${outputCount} salidas</text>`;
+
+  const legendWidth = Math.max(92, 34 + weightLabels.reduce((sum, label) => sum + Math.max(38, label.length * 8), 0));
+  html += `<rect x="12" y="6" width="${legendWidth}" height="28" rx="6" class="arch-legend-box"/>`;
+  let legendX = 20;
+  weightLabels.forEach((label, idx) => {
+    html += `<line x1="${legendX}" y1="18" x2="${legendX + 14}" y2="18" class="arch-legend" ${weightStyle(idx)}/>`;
+    html += `<text x="${legendX + 18}" y="22" class="arch-legend-text">${escapeText(label)}</text>`;
+    legendX += Math.max(38, label.length * 8);
+  });
   html += `<text x="20" y="32" class="arch-density">conectividad: ${(cIH * 100).toFixed(0)}% / ${(cHO * 100).toFixed(0)}%</text>`;
   html += '</svg>';
 

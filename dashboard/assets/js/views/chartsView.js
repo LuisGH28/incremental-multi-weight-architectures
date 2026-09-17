@@ -8,7 +8,31 @@ export function renderFitnessChart(charts) {
   fitnessChart.update('none');
 }
 
-export function renderSessionChart(charts) {
+function sessionLabels(nSessions) {
+  return Array.from({ length: nSessions }, (_, idx) => `T${idx + 1}`);
+}
+
+export function configureSessionChart(config) {
+  const nSessions = config?.nSessions || 0;
+  sessionChart.data.labels = sessionLabels(nSessions);
+
+  const reference = config?.reference;
+  const referenceDataset = sessionChart.data.datasets[1];
+  if (reference?.sessionAccuracies?.length) {
+    referenceDataset.label = reference.name;
+    referenceDataset.data = reference.sessionAccuracies;
+    referenceDataset.hidden = false;
+  } else {
+    referenceDataset.label = 'Reference';
+    referenceDataset.data = [];
+    referenceDataset.hidden = true;
+  }
+
+  sessionChart.update('none');
+}
+
+export function renderSessionChart(charts, config) {
+  if (config) configureSessionChart(config);
   sessionChart.data.datasets[0].data = charts.sessionAccuracies;
   sessionChart.update();
 }

@@ -198,9 +198,15 @@ def main():
     ap.add_argument("--generations",   type=int, default=50)
     ap.add_argument("--pop-size",      type=int, default=100)
     ap.add_argument("--max-epochs",    type=int, default=500)
+    ap.add_argument("--mutation-std",  type=float, default=0.05)
+    ap.add_argument("--top-frac",      type=float, default=0.10)
     ap.add_argument("--no-dual",       action="store_true")
     ap.add_argument("--seed",          type=int, default=42)
     ap.add_argument("--verbose-indiv", type=int, default=3)
+    ap.add_argument("--out-prefix", default="fw3")
+    ap.add_argument("--tri-runs",   type=int, default=5)
+    ap.add_argument("--dir-data",   default="result")
+    ap.add_argument("--dir-plots",  default="plots")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--log",  type=str, default="neuroevo.log",
                     help="Ruta del archivo .log")
@@ -215,8 +221,14 @@ def main():
         "--generations",   str(args.generations),
         "--pop-size",      str(args.pop_size),
         "--max-epochs",    str(args.max_epochs),
+        "--mutation-std",  str(args.mutation_std),
+        "--top-frac",      str(args.top_frac),
         "--seed",          str(args.seed),
         "--verbose-indiv", str(args.verbose_indiv),
+        "--out-prefix",    args.out_prefix,
+        "--tri-runs",      str(args.tri_runs),
+        "--dir-data",      args.dir_data,
+        "--dir-plots",     args.dir_plots,
         "--dashboard",
     ]
     if args.train:

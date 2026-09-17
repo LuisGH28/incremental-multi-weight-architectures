@@ -11,6 +11,18 @@ function withConnection(state, connection) {
   return { ...state, connection };
 }
 
+function withRuntimeConfig(config, values) {
+  return {
+    nInputs: config.nInputs,
+    nOutputs: config.nOutputs,
+    nSessions: config.nSessions,
+    nFastWeightLines: config.nFastWeightLines,
+    weightLabels: config.weightLabels,
+    useDual: config.useDual,
+    ...values,
+  };
+}
+
 export function reduceExperimentState(state, action) {
   switch (action.type) {
     case StreamActionTypes.OPEN:
@@ -30,15 +42,15 @@ export function reduceExperimentState(state, action) {
     case EventTypes.CONFIG:
       return {
         ...state,
-        config: { ...state.config, ...action },
+        config: { ...state.config, ...action.config, received: true },
         progress: {
           ...state.progress,
-          label: `Gen 0 / ${action.n_generations}`,
+          label: `Gen 0 / ${action.config.nGenerations}`,
         },
       };
 
     case EventTypes.GEN_START: {
-      const total = state.config.n_generations || action.n_gen || 0;
+      const total = state.config.nGenerations || action.n_gen || 0;
       return {
         ...state,
         lifecycle: 'running',
@@ -60,7 +72,10 @@ export function reduceExperimentState(state, action) {
           session: action.session,
           n_patterns: action.n_patterns,
           class_counts: action.class_counts || {},
-          arch: action.arch || null,
+          nSessions: state.config.nSessions,
+          arch: action.arch
+            ? withRuntimeConfig(state.config, action.arch)
+            : null,
         },
       };
 
@@ -80,7 +95,9 @@ export function reduceExperimentState(state, action) {
           populationMean: [...state.charts.populationMean, action.pop_mean],
         },
         populationFitness: action.fitness_all || state.populationFitness,
-        bestGenotype: action.best_genotype || state.bestGenotype,
+        bestGenotype: action.best_genotype
+          ? withRuntimeConfig(state.config, action.best_genotype)
+          : state.bestGenotype,
       };
 
     case EventTypes.FINAL_START:
@@ -96,7 +113,15 @@ export function reduceExperimentState(state, action) {
           stdAcc: action.std_acc,
           targetAcc: action.target_acc,
         },
-        bestGenotype: action.best_genotype || state.bestGenotype,
+        bestGenotype: action.best_genotype
+          ? withRuntimeConfig(state.config, {
+              nInputs: action.n_inputs || state.config.nInputs,
+              nOutputs: action.n_outputs || state.config.nOutputs,
+              nFastWeightLines: action.n_fast_weight_lines || state.config.nFastWeightLines,
+              weightLabels: action.weight_labels || state.config.weightLabels,
+              ...action.best_genotype,
+            })
+          : state.bestGenotype,
         charts: {
           ...state.charts,
           sessionAccuracies: action.session_accs || [],
@@ -104,7 +129,7 @@ export function reduceExperimentState(state, action) {
         progress: {
           ...state.progress,
           percent: 100,
-          label: `Gen ${state.config.n_generations} / ${state.config.n_generations}`,
+          label: `Gen ${state.config.nGenerations} / ${state.config.nGenerations}`,
         },
       };
 

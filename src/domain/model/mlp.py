@@ -82,7 +82,14 @@ class MLP:
                 "session_start",
                 gen=gen, individual=individual_idx,
                 session=session_idx, n_patterns=N,
-                arch={"n_hid": self.n_hid, "use_dual": self.use_dual, "n_fw": 3},
+                arch={
+                    "n_hid": self.n_hid,
+                    "n_inputs": self.N_IN,
+                    "n_outputs": self.N_OUT,
+                    "use_dual": self.use_dual,
+                    "n_fast_weight_lines": 3,
+                    "weight_labels": ["w", "fw1", "fw2", "fw3"],
+                },
             )
 
         correct  = 0

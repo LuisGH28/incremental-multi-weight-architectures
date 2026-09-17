@@ -3,7 +3,7 @@ import { byId } from '../utils/dom.js';
 import { renderConnectionStatus } from './statusView.js';
 import { renderGenerationMetric, renderFitnessMetrics } from './metricsView.js';
 import { renderProgress } from './progressView.js';
-import { renderFitnessChart, renderSessionChart } from './chartsView.js';
+import { configureSessionChart, renderFitnessChart, renderSessionChart } from './chartsView.js';
 import { renderFinalResult } from './finalResultView.js';
 import { logMalformedEvent, logSession } from './logView.js';
 import { renderFlow } from './flowView.js';
@@ -51,6 +51,7 @@ export function renderStreamAction(elements, action, state) {
 export function renderExperimentEvent(elements, event, state) {
   switch (event.type) {
     case EventTypes.CONFIG:
+      configureSessionChart(state.config);
       renderProgress({
         bar: elements.progressBar,
         label: elements.progressLabel,
@@ -69,9 +70,9 @@ export function renderExperimentEvent(elements, event, state) {
 
     case EventTypes.SESSION_START:
       if (event.individual < 3) {
-        renderFlow(elements, event);
+        renderFlow(elements, state.currentSession);
         logSession(elements, `[Gen ${event.gen} | Ind ${event.individual} | Sesión T${event.session + 1}] ${event.n_patterns} patrones`, 'session');
-        if (event.arch) renderArchitecture(elements, event.arch);
+        if (state.currentSession?.arch) renderArchitecture(elements, state.currentSession.arch);
       }
       break;
 
@@ -112,7 +113,7 @@ export function renderExperimentEvent(elements, event, state) {
         accuracy: elements.finalAccuracy,
         subtitle: elements.finalSubtitle,
       }, state.finalResult);
-      renderSessionChart(state.charts);
+      renderSessionChart(state.charts, state.config);
       renderProgress({
         bar: elements.progressBar,
         label: elements.progressLabel,
