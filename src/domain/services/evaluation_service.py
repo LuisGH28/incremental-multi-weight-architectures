@@ -15,7 +15,7 @@ import numpy as np
 
 from src.domain.model.genotype import Genotype
 from src.domain.model.mlp import MLP
-from src.infrastructure.data.incremental_splitter import split_incremental
+from src.infrastructure.data.incremental_splitter import DEFAULT_N_SESSIONS, split_incremental
 
 
 def evaluate_individual(
@@ -34,7 +34,7 @@ def evaluate_triangular(
     top_individuals, X_train, y_train, X_test, y_test,
     use_dual, max_epochs, master_rng, n_runs=5, log_fn=None, n_inputs=784,
 ):
-    n_sessions = 6
+    n_sessions = DEFAULT_N_SESSIONS
     g = top_individuals[0]
     all_matrices, all_s_accs, all_t_accs = [], [], []
 
@@ -56,7 +56,7 @@ def evaluate_triangular(
         all_s_accs.append(s_accs)
         all_t_accs.append(net.accuracy(X_test, y_test) * 100)
         if log_fn:
-            log_fn(f"  [Triangular run {run+1}/{n_runs}] T6_test={s_accs[-1]:.2f}%")
+            log_fn(f"  [Triangular run {run+1}/{n_runs}] T{n_sessions}_test={s_accs[-1]:.2f}%")
 
     avg = [[None] * n_sessions for _ in range(n_sessions)]
     for s in range(n_sessions):
@@ -89,7 +89,6 @@ def print_triangular_matrix(matrix, session_accs, mean_acc, std_acc, label="fw³
               f"  {'Test':<8s}" + "".join(f"  {a:>8.2f}" for a in session_accs),
               f"  {sep}",
               f"  Media (top 10%): {mean_acc:.2f}% ± {std_acc:.2f}%",
-              f"  Referencia Bullinaria fw¹ (OptDigits): 95.07% ± 0.04%",
               "=" * 74, ""]
     output = "\n".join(lines)
     print(output, flush=True)

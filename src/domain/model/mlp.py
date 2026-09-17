@@ -95,8 +95,10 @@ class MLP:
                 arch={
                     "n_hid":    self.n_hid,
                     "n_inputs": self.n_inputs,
+                    "n_outputs": self.N_OUT,
                     "use_dual": self.use_dual,
-                    "n_fw":     3,
+                    "n_fast_weight_lines": 3,
+                    "weight_labels": ["w", "fw1", "fw2", "fw3"],
                 },
             )
 

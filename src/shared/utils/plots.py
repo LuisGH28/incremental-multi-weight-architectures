@@ -1,8 +1,7 @@
 """
 shared/utils/plots.py
 ======================
-Plots for the fw3 extension, including the Bullinaria (2009) Figure 1 style
-parameter panel for fw1 + fw2 + fw3.
+Plots for the fw3 extension, including a parameter panel for fw1 + fw2 + fw3.
 """
 from __future__ import annotations
 import numpy as np
@@ -74,12 +73,10 @@ def plot_evolution(history, label: str, out_path: str, log_fn=None) -> None:
     if test_clean:
         gx, vx = zip(*test_clean)
         ax.plot(gx, vx, color=C["test"], lw=1.6, ls="--", label="Test set")
-    ax.axhline(95.07, color="#6B7280", lw=0.9, ls=":", label="Bullinaria fw¹ 95.07%")
     ax.set_ylim(60, 100); ax.legend(fontsize=7, framealpha=0.7)
 
     fig.suptitle(
-        f"Evolution of parameters and performance — {label}\n"
-        f"(replica of Bullinaria 2009, Figure 1)",
+        f"Evolution of parameters and performance — {label}",
         fontsize=10, fontweight="bold", y=0.995,
     )
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -91,7 +88,7 @@ def plot_evolution(history, label: str, out_path: str, log_fn=None) -> None:
 def plot_triangular_heatmap(
     matrix, session_accs, mean_acc, std_acc, label, out_path, log_fn=None,
 ):
-    n    = 6
+    n    = len(matrix)
     data = np.full((n + 1, n), np.nan)
     for s in range(n):
         for b in range(n):
@@ -117,8 +114,7 @@ def plot_triangular_heatmap(
     ax.axhline(n - 0.5, color="white", lw=2.5)
     ax.set_title(
         f"Triangular Evaluation Matrix — {label}\n"
-        f"Mean test acc: {mean_acc:.2f}% ± {std_acc:.2f}%   "
-        f"(Bullinaria fw¹: 95.07% ± 0.04%)",
+        f"Mean test acc: {mean_acc:.2f}% ± {std_acc:.2f}%",
         fontsize=10, fontweight="bold",
     )
     ax.set_xlabel("Batch (Bⱼ)", fontsize=9)

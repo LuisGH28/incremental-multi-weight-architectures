@@ -28,8 +28,12 @@ from src.domain.services.evaluation_service import (
     print_triangular_matrix, save_triangular_csv,
     compute_confusion, save_confusion_csv,
 )
-from src.infrastructure.data.incremental_splitter import split_incremental
+from src.infrastructure.data.incremental_splitter import DEFAULT_N_SESSIONS, split_incremental
 from src.infrastructure.events.stdout_event_publisher import EventPublisher
+
+
+WEIGHT_LABELS = ["w", "fw1", "fw2", "fw3"]
+N_FAST_WEIGHT_LINES = 3
 
 
 def _eval_worker(args):
@@ -112,6 +116,7 @@ def run_evolution(
 
     # The real input dimensionality keeps MNIST and OptDigits experiments on the same code path.
     n_inputs = X_train.shape[1]
+    n_outputs = n_out
 
     def emit(event_type, **kwargs):
         if publisher: publisher.emit(event_type, **kwargs)
@@ -131,14 +136,17 @@ def run_evolution(
 
     csv_file = open(os.path.join(dir_data, f"{out_prefix}_progress.csv"), "w", newline="")
     cw = csv.writer(csv_file)
-    cw.writerow(["gen", "best_fitness_val",
-                 "T1_test", "T2_test", "T3_test", "T4_test", "T5_test", "T6_test", "elapsed_s"])
+    session_headers = [f"T{i + 1}_test" for i in range(DEFAULT_N_SESSIONS)]
+    cw.writerow(["gen", "best_fitness_val", *session_headers, "elapsed_s"])
     csv_file.flush()
 
     emit("config", pop_size=pop_size, n_generations=n_generations,
          use_dual=use_dual, max_epochs=max_epochs,
          n_train=len(X_train), n_test=len(X_test),
-         n_fw_lines=3, n_inputs=n_inputs)
+         dataset="mnist", n_inputs=n_inputs, n_outputs=n_outputs,
+         n_sessions=DEFAULT_N_SESSIONS,
+         n_fast_weight_lines=N_FAST_WEIGHT_LINES,
+         weight_labels=WEIGHT_LABELS)
 
     population = [Genotype.random(master_rng) for _ in range(pop_size)]
     fitness    = np.zeros(pop_size)
@@ -208,13 +216,13 @@ def run_evolution(
 
         elapsed_gen = time.time() - t0
         elapsed_tot = time.time() - run_start
-        while len(t_accs) < 6: t_accs.append("")
+        while len(t_accs) < DEFAULT_N_SESSIONS: t_accs.append("")
         cw.writerow([gen, round(float(fitness[best_idx]) * 100, 2),
-                     *t_accs[:6], round(elapsed_gen, 1)])
+                     *t_accs[:DEFAULT_N_SESSIONS], round(elapsed_gen, 1)])
         csv_file.flush()
 
         log_fn(f"[GEN {gen:3d}] best={fitness[best_idx]*100:.2f}%  "
-               f"top10={top_fit*100:.2f}%  T6={t_accs[5]}%  "
+               f"top10={top_fit*100:.2f}%  T{DEFAULT_N_SESSIONS}={t_accs[DEFAULT_N_SESSIONS - 1]}%  "
                f"gen={_elapsed_str(elapsed_gen)}  total={_elapsed_str(elapsed_tot)}")
         log_detail_fn(f"  Mejor genotipo gen {gen}: {best_g.summary()}")
 
@@ -285,20 +293,22 @@ def run_evolution(
     log_fn(f"\n{'='*60}")
     log_fn(f"RESULTADO FINAL — {n_inputs} entradas")
     log_fn(f"  Accuracy: {mean_acc:.2f}% ± {std_acc:.2f}%")
-    log_fn(f"  Referencia Bullinaria fw¹ (OptDigits): 95.07% ± 0.04%")
     log_fn(f"  Tiempo total: {_elapsed_str(total_elapsed)}")
     log_fn(f"{'='*60}")
 
-    ft = session_accs[0] if session_accs else [""] * 6
-    while len(ft) < 6: ft.append("")
-    cw.writerow(["FINAL", round(mean_acc, 2), *ft[:6], round(total_elapsed, 1)])
+    ft = session_accs[0] if session_accs else [""] * DEFAULT_N_SESSIONS
+    while len(ft) < DEFAULT_N_SESSIONS: ft.append("")
+    cw.writerow(["FINAL", round(mean_acc, 2), *ft[:DEFAULT_N_SESSIONS], round(total_elapsed, 1)])
     csv_file.flush(); csv_file.close()
 
     emit("final_result",
          mean_acc=round(mean_acc, 2), std_acc=round(std_acc, 2),
          session_accs=session_accs[0] if session_accs else [],
          best_genotype=top_indivs[0].to_dict(),
-         target_acc=95.07, n_fw_lines=3, n_inputs=n_inputs)
+         dataset="mnist", n_inputs=n_inputs, n_outputs=n_outputs,
+         n_sessions=DEFAULT_N_SESSIONS,
+         n_fast_weight_lines=N_FAST_WEIGHT_LINES,
+         weight_labels=WEIGHT_LABELS)
 
     log_fn(f"\n[Generando matriz triangular ({tri_runs} runs)...]")
     tri_matrix, tri_s_accs, tri_mean, tri_std = evaluate_triangular(
@@ -314,16 +324,15 @@ def run_evolution(
                         label=label_full)
 
     txt_lines = [f"MATRIZ TRIANGULAR — {label_full}\n",
-                 f"{'Sesion':<8s}" + "".join(f"{'B'+str(i+1):>9s}" for i in range(6)) + "\n"]
-    for s in range(6):
+                 f"{'Sesion':<8s}" + "".join(f"{'B'+str(i+1):>9s}" for i in range(DEFAULT_N_SESSIONS)) + "\n"]
+    for s in range(DEFAULT_N_SESSIONS):
         row = f"T{str(s+1):<7s}"
-        for b in range(6):
+        for b in range(DEFAULT_N_SESSIONS):
             v = tri_matrix[s][b]
             row += f"{v:>9.2f}" if v is not None else f"{'--':>9s}"
         txt_lines.append(row + "\n")
     txt_lines += [f"{'Test':<8s}" + "".join(f"{a:>9.2f}" for a in tri_s_accs) + "\n",
                   f"\nMedia: {tri_mean:.2f}% ± {tri_std:.2f}%\n",
-                  f"Referencia Bullinaria fw¹ (OptDigits): 95.07% ± 0.04%\n",
                   f"Tiempo total: {_elapsed_str(total_elapsed)}\n"]
     with open(os.path.join(dir_data, f"{out_prefix}_triangular.txt"), "w") as f:
         f.writelines(txt_lines)

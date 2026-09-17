@@ -22,12 +22,12 @@ export const fitnessChart = new Chart(document.getElementById('chart-fitness'), 
 export const sessionChart = new Chart(document.getElementById('chart-sessions'), {
   type: 'line',
   data: {
-    labels: ['T1','T2','T3','T4','T5','T6'],
+    labels: [],
     datasets: [
       { label: 'Test acc', data: [], borderColor: '#f59e0b', borderWidth: 2, pointRadius: 4,
         pointBackgroundColor: '#f59e0b', tension: 0.2 },
-      { label: 'Reference target', data: [91.62,93.47,94.21,94.60,94.87,95.07],
-        borderColor: 'rgba(99,102,241,0.4)', borderWidth: 1, pointRadius: 2, borderDash: [4,3], tension: 0.2 }
+      { label: 'Reference', data: [],
+        borderColor: 'rgba(99,102,241,0.4)', borderWidth: 1, pointRadius: 2, borderDash: [4,3], tension: 0.2, hidden: true }
     ]
   },
   options: {
